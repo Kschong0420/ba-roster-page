@@ -5915,6 +5915,13 @@
           '<div class="field"><button type="button" class="btn btn-sm" id="btnAvatarToWebp">開始轉換</button></div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">把已存的 PNG／JPEG 轉成 WebP 以省空間（保留透明，無法還原）。立即生效，不需按「儲存」。</div>' +
           '<div id="avatarToWebpStatus" style="display:none; font-size:12.5px; color:var(--ink-soft); margin:-4px 0 12px;"></div>' +
+          '<div class="fieldset-title">設定備份</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">匯出所有設定與圖片（含背景圖片、各背景方案），不含學生資料與 token。匯入會取代目前設定並重新載入。</div>' +
+          '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
+            '<button type="button" class="btn btn-sm" id="btnSettingsExport">匯出設定</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSettingsImport">匯入設定</button>' +
+            '<input type="file" id="settingsImportInput" accept=".gz,.json,application/json,application/gzip" hidden>' +
+          '</div>' +
           '<div class="fieldset-title">雲端同步（GitHub）</div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">把資料推送到你的 GitHub 私人 repo，再從另一台拉取。整份覆蓋，建議開始前先拉取、改完再推送。立即生效；token 只存在這台裝置。</div>' +
           '<form id="syncLoginForm" autocomplete="on" novalidate>' +
@@ -6246,6 +6253,14 @@
     })();
 
     document.getElementById("btnExportDiag").addEventListener("click", exportDiagnostics);
+
+    // 設定備份
+    document.getElementById("btnSettingsExport").addEventListener("click", function(){ exportSettingsFile(); });
+    (function(){
+      const fi = document.getElementById("settingsImportInput");
+      document.getElementById("btnSettingsImport").addEventListener("click", function(){ fi.click(); });
+      fi.addEventListener("change", function(){ const f = fi.files && fi.files[0]; fi.value = ""; if(f) importSettingsFile(f); });
+    })();
 
     // 雲端同步：欄位一改就存到這台裝置；按鈕直接執行，不經過設定的「儲存」
     (function setupCloudSync(){
@@ -11762,15 +11777,15 @@
     return changed;
   }
 
-  // 讀取備份內容（檔案或雲端共用）：自動判斷是否 gzip，格式不對會丟出帶中文訊息的 Error
-  async function parseBackupBuffer(buffer){
+  // 讀取檔案內容：自動判斷是否 gzip，再解析成 JSON。label 用在錯誤訊息（例如「備份檔」「設定檔」）
+  async function readJsonBuffer(buffer, label){
     let text;
     try{
       const head = new Uint8Array(buffer.slice(0, 2));
       const isGzip = head[0] === 0x1f && head[1] === 0x8b;
       if(isGzip){
         if(typeof DecompressionStream === "undefined"){
-          throw new Error("這個瀏覽器不支援解壓縮備份檔，請改用較新版的 Chrome / Edge / Safari 匯入。");
+          throw new Error("這個瀏覽器不支援解壓縮檔案，請改用較新版的 Chrome / Edge / Safari。");
         }
         const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"));
         text = await new Response(stream).text();
@@ -11779,15 +11794,80 @@
       }
     } catch(err){
       if(err && /瀏覽器不支援/.test(err.message)) throw err;
-      throw new Error("這個檔案不是有效的備份檔。");
+      throw new Error("這個檔案不是有效的" + label + "。");
     }
-    let data;
-    try{ data = JSON.parse(text); }
-    catch(err){ throw new Error("這個檔案不是有效的 JSON 備份檔。"); }
+    try{ return JSON.parse(text); }
+    catch(err){ throw new Error("這個檔案不是有效的 JSON " + label + "。"); }
+  }
+
+  // 讀取備份內容（檔案或雲端共用），格式不對會丟出帶中文訊息的 Error
+  async function parseBackupBuffer(buffer){
+    const data = await readJsonBuffer(buffer, "備份檔");
     if(!data || !Array.isArray(data.schools) || !Array.isArray(data.students)){
       throw new Error("檔案格式不符，無法匯入。");
     }
     return data;
+  }
+
+  // ---------- 設定備份：所有設定與圖片（含背景圖片、各背景方案）----------
+  // 不含學生資料（那是「匯出備份」）；也不含雲端同步的 token，簡寫清單與變體群組屬於資料備份，同樣不放在這裡。
+  const SETTINGS_EXPORT_SKIP = ["ba-roster-sync", "ba-roster-abbrev-list", "ba-roster-variant-groups"];
+  function settingsKeyOk(k){ return typeof k === "string" && k.indexOf("ba-roster") === 0 && SETTINGS_EXPORT_SKIP.indexOf(k) < 0; }
+  function settingsLocalKeys(){
+    const out = [];
+    for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); if(settingsKeyOk(k)) out.push(k); }
+    return out;
+  }
+  async function exportSettingsFile(){
+    await bgSlotsReady;
+    const ls = {};
+    settingsLocalKeys().forEach(function(k){ ls[k] = localStorage.getItem(k); });
+    const slots = {};
+    for(let i = 1; i <= BG_SLOT_MAX; i++){ if(bgSlotCache[i]) slots[i] = bgSlotCache[i]; }
+    const payload = { type: "ba-roster-settings", version: 1, exportedAt: new Date().toISOString(), localStorage: ls, bgSlots: slots };
+    const bytes = await syncPack(payload);
+    const gz = bytes.length > 1 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([bytes], { type: gz ? "application/gzip" : "application/json" }));
+    a.download = "ba-roster-settings-" + new Date().toISOString().slice(0, 10) + (gz ? ".json.gz" : ".json");
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  }
+  async function importSettingsFile(file){
+    let data;
+    try{ data = await readJsonBuffer(await file.arrayBuffer(), "設定檔"); }
+    catch(err){ alert(err.message); return; }
+    if(!data || data.type !== "ba-roster-settings" || !data.localStorage || typeof data.localStorage !== "object"){
+      alert("這不是設定匯出檔（請選用「匯出設定」產生的檔案）。"); return;
+    }
+    const entries = Object.keys(data.localStorage).filter(function(k){ return settingsKeyOk(k) && typeof data.localStorage[k] === "string"; });
+    const slotNums = Object.keys(data.bgSlots || {}).map(Number).filter(function(n){ return n >= 1 && n <= BG_SLOT_MAX && data.bgSlots[n] && typeof data.bgSlots[n] === "object"; });
+    if(!entries.length && !slotNums.length){ alert("檔案裡沒有可匯入的設定。"); return; }
+    if(!window.confirm("匯入設定會取代目前所有的設定（含背景圖片與各背景方案），學生資料不受影響。\n\n檔案內容：" + entries.length + " 項設定、" + slotNums.length + " 個背景方案。\n要繼續嗎？")) return;
+    const old = {};
+    settingsLocalKeys().forEach(function(k){ old[k] = localStorage.getItem(k); });
+    try{
+      Object.keys(old).forEach(function(k){ localStorage.removeItem(k); });
+      entries.forEach(function(k){ localStorage.setItem(k, data.localStorage[k]); });
+    }catch(err){
+      // 寫到一半失敗（例如瀏覽器儲存空間不足）：還原成原本的設定
+      try{
+        settingsLocalKeys().forEach(function(k){ localStorage.removeItem(k); });
+        Object.keys(old).forEach(function(k){ localStorage.setItem(k, old[k]); });
+      }catch(_){}
+      alert("匯入失敗：瀏覽器儲存空間不足，已保留原本的設定。");
+      return;
+    }
+    try{
+      await bgSlotsReady;
+      for(let i = 1; i <= BG_SLOT_MAX; i++){
+        if(slotNums.indexOf(i) >= 0) await bgSlotPut(i, bgSlotSnapshot(data.bgSlots[i]));
+        else await bgSlotDelete(i);
+      }
+    }catch(_){}
+    bgSlotsDiscardPending();
+    alert("設定已匯入，頁面將重新載入。");
+    location.reload();
   }
 
   // 把備份內容寫進資料庫。mode："merge" 合併｜"replace" 先清空再匯入
