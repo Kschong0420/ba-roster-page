@@ -626,6 +626,21 @@
     font-size:14px; color:var(--ink); background:var(--soft-bg);
   }
   @media (max-width:600px){ .bk-opts .theme-opt{ flex:1 1 calc(50% - 6px); } }
+  /* 進階頁的可收合區塊 */
+  .settings-fold{ border-top:1px dashed var(--border); margin-top:6px; }
+  .settings-fold > summary{
+    list-style:none; cursor:pointer; display:flex; align-items:baseline; gap:8px;
+    padding:13px 0; color:var(--ink);
+  }
+  .settings-fold > summary::-webkit-details-marker{ display:none; }
+  .settings-fold > summary::before{
+    content:"▸"; font-size:12px; color:var(--ink-soft); transition:transform .15s; flex:none; width:12px;
+  }
+  .settings-fold[open] > summary::before{ transform:rotate(90deg); }
+  .settings-fold .fold-title{ font-weight:800; font-size:14.5px; }
+  .settings-fold .fold-hint{ font-size:12px; color:var(--ink-soft); }
+  .settings-fold-body{ padding:0 0 10px; }
+  .settings-fold-body > .setting-row:first-child{ border-top:none; }
   .name-with-icons-row{ display:flex; align-items:center; gap:8px; }
   .name-with-icons-row input[type=text]{ flex:1; min-width:0; }
   .name-row-icons{
@@ -2128,6 +2143,18 @@
     return rgbToHex(out.r, out.g, out.b);
   }
 
+  // 進階頁各區塊的展開狀態（記住使用者上次的選擇）
+  const ADV_FOLD_KEY = "ba-roster-adv-folds";
+  function advFoldOpen(key, def){
+    try{ const o = JSON.parse(localStorage.getItem(ADV_FOLD_KEY) || "{}") || {}; return Object.prototype.hasOwnProperty.call(o, key) ? !!o[key] : def; }
+    catch(_){ return def; }
+  }
+  function advFoldSave(key, open){
+    try{
+      const o = JSON.parse(localStorage.getItem(ADV_FOLD_KEY) || "{}") || {};
+      o[key] = !!open; localStorage.setItem(ADV_FOLD_KEY, JSON.stringify(o));
+    }catch(_){}
+  }
   const AV_EXPORT_NOTES = {
     none: "匯出檔不含 WebP：WebP 會轉回 PNG（檔案可能變大）。",
     keep: "維持各圖片目前的格式，不轉換。",
@@ -5887,6 +5914,44 @@
           spOutputSettingsHtml(draft, "st_") +
         '</div>' +
         '<div class="settings-page" data-page="advanced" style="display:none">' +
+          '<details class="settings-fold" data-fold="sync"' + (advFoldOpen("sync", true) ? " open" : "") + '>' +
+            '<summary><span class="fold-title">雲端同步（GitHub）</span><span class="fold-hint">推送／拉取資料</span></summary>' +
+            '<div class="settings-fold-body">' +
+          '<div style="font-size:12.5px; color:var(--ink-soft); margin:0 0 10px;">整份覆蓋：開始前先拉取，改完再推送。按鈕立即生效；token 只存在這台裝置。</div>' +
+          '<form id="syncLoginForm" autocomplete="on" novalidate>' +
+            '<div class="field"><label for="st_syncRepo">repo（帳號/名稱）</label><input type="text" id="st_syncRepo" name="username" placeholder="myname/ba-roster-data" autocomplete="username" autocapitalize="off" spellcheck="false"></div>' +
+            '<div class="field"><label for="st_syncToken">token</label><input type="password" id="st_syncToken" name="password" placeholder="github_pat_…" autocomplete="current-password" autocapitalize="off" spellcheck="false">' +
+              '<label style="display:flex; align-items:center; gap:6px; margin:8px 0 0; font-weight:600;"><input type="checkbox" id="st_syncShowToken"> 顯示 token</label></div>' +
+            '<div style="height:6px;"></div>' +
+            '<button type="submit" hidden tabindex="-1" aria-hidden="true"></button>' +
+          '</form>' +
+          '<div class="field"><label for="st_syncDevice">這台裝置的名稱</label><input type="text" id="st_syncDevice" placeholder="例如：手機、電腦" autocomplete="off"></div>' +
+          '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
+            '<button type="button" class="btn btn-sm" id="btnSyncTest">連線測試</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSyncPush">推送到雲端</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSyncPull">從雲端拉取</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSyncClear">清除連線資料</button>' +
+          '</div>' +
+          '<div id="syncStatus" style="font-size:12.5px; color:var(--ink-soft); margin:6px 0 12px; white-space:pre-line;"></div>' +
+          '<div class="fieldset-title">開啟網頁時檢查雲端新版本</div>' +
+          '<div class="theme-toggle-row">' +
+            '<button type="button" class="btn btn-sm theme-opt" id="st_syncCheckOff">關閉</button>' +
+            '<button type="button" class="btn btn-sm theme-opt" id="st_syncCheckOn">開啟</button>' +
+          '</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">打開網頁或切回分頁時查一次雲端，有新版本會在下方提示，由你決定是否拉取。</div>' +
+          '<div class="fieldset-title">從雲端拉取前，先下載本機備份？</div>' +
+          '<div class="theme-toggle-row bk-opts" style="flex-wrap:wrap;">' +
+            '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkNever">不下載</button>' +
+            '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkSame">一致時不下載</button>' +
+            '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkEdit">僅學生資料不同時不下載</button>' +
+            '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkAlways">永遠下載</button>' +
+          '</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">決定拉取（會取代這台資料）前要不要先下載本機備份。「僅學生資料不同」：差異只在學生編輯視窗的內容時不下載；學校、簡寫清單、群組有差異，或學生人數不同仍會下載。</div>' +
+            '</div>' +
+          '</details>' +
+          '<details class="settings-fold" data-fold="backup"' + (advFoldOpen("backup", false) ? " open" : "") + '>' +
+            '<summary><span class="fold-title">備份與匯出</span><span class="fold-hint">備份格式、設定備份、除錯資料</span></summary>' +
+            '<div class="settings-fold-body">' +
           '<div class="fieldset-title">匯出備份格式</div>' +
           '<div class="field">' +
             '<div class="theme-toggle-row">' +
@@ -5895,9 +5960,21 @@
             '</div>' +
           '</div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">壓縮格式檔案較小但無法直接開啟，純文字格式檔案較大但可直接編輯。</div>' +
+          '<div class="fieldset-title">設定備份</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">匯出所有設定與圖片（含背景圖片、各背景方案），不含學生資料與 token。匯入會取代目前設定並重新載入。</div>' +
+          '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
+            '<button type="button" class="btn btn-sm" id="btnSettingsExport">匯出設定</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSettingsImport">匯入設定</button>' +
+            '<input type="file" id="settingsImportInput" accept=".gz,.json,application/json,application/gzip" hidden>' +
+          '</div>' +
           '<div class="fieldset-title">除錯資料</div>' +
           '<div class="field"><button type="button" class="btn btn-sm" id="btnExportDiag">匯出除錯資料</button></div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">遇到問題要回報時使用：匯出瀏覽器資訊、設定、資料庫內容和最近的錯誤記錄。不含任何圖片（卡片圖片、圖示、背景只記大小），檔案是可直接開啟的 JSON。</div>' +
+            '</div>' +
+          '</details>' +
+          '<details class="settings-fold" data-fold="card"' + (advFoldOpen("card", false) ? " open" : "") + '>' +
+            '<summary><span class="fold-title">卡片圖片格式</span><span class="fold-hint">WebP 轉換</span></summary>' +
+            '<div class="settings-fold-body">' +
           '<div class="fieldset-title">卡片圖片上傳時轉成 <span style="text-transform:none">WebP</span></div>' +
           '<div class="theme-toggle-row">' +
             '<button type="button" class="btn btn-sm theme-opt' + (draft.avatarUploadWebp === false ? " active" : "") + '" id="st_avUpWebpOff">關閉</button>' +
@@ -5915,44 +5992,8 @@
           '<div class="field"><button type="button" class="btn btn-sm" id="btnAvatarToWebp">開始轉換</button></div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">把已存的 PNG／JPEG 轉成 WebP 以省空間（保留透明，無法還原）。立即生效，不需按「儲存」。</div>' +
           '<div id="avatarToWebpStatus" style="display:none; font-size:12.5px; color:var(--ink-soft); margin:-4px 0 12px;"></div>' +
-          '<div class="fieldset-title">設定備份</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">匯出所有設定與圖片（含背景圖片、各背景方案），不含學生資料與 token。匯入會取代目前設定並重新載入。</div>' +
-          '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
-            '<button type="button" class="btn btn-sm" id="btnSettingsExport">匯出設定</button>' +
-            '<button type="button" class="btn btn-sm" id="btnSettingsImport">匯入設定</button>' +
-            '<input type="file" id="settingsImportInput" accept=".gz,.json,application/json,application/gzip" hidden>' +
-          '</div>' +
-          '<div class="fieldset-title">雲端同步（GitHub）</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">把資料推送到你的 GitHub 私人 repo，再從另一台拉取。整份覆蓋，建議開始前先拉取、改完再推送。立即生效；token 只存在這台裝置。</div>' +
-          '<form id="syncLoginForm" autocomplete="on" novalidate>' +
-            '<div class="field"><label for="st_syncRepo">repo（帳號/名稱）</label><input type="text" id="st_syncRepo" name="username" placeholder="myname/ba-roster-data" autocomplete="username" autocapitalize="off" spellcheck="false"></div>' +
-            '<div class="field"><label for="st_syncToken">token</label><input type="password" id="st_syncToken" name="password" placeholder="github_pat_…" autocomplete="current-password" autocapitalize="off" spellcheck="false">' +
-              '<label style="display:flex; align-items:center; gap:6px; margin:8px 0 0; font-weight:600;"><input type="checkbox" id="st_syncShowToken"> 顯示 token</label></div>' +
-            '<div style="height:6px;"></div>' +
-            '<button type="submit" hidden tabindex="-1" aria-hidden="true"></button>' +
-          '</form>' +
-          '<div class="field"><label for="st_syncDevice">這台裝置的名稱</label><input type="text" id="st_syncDevice" placeholder="例如：手機、電腦" autocomplete="off"></div>' +
-          '<div class="fieldset-title">開啟網頁時檢查雲端新版本</div>' +
-          '<div class="theme-toggle-row">' +
-            '<button type="button" class="btn btn-sm theme-opt" id="st_syncCheckOff">關閉</button>' +
-            '<button type="button" class="btn btn-sm theme-opt" id="st_syncCheckOn">開啟</button>' +
-          '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">打開網頁或切回分頁時查一次雲端，有新版本會在下方提示，由你決定是否拉取。</div>' +
-          '<div class="fieldset-title">從雲端拉取前，先下載本機備份？</div>' +
-          '<div class="theme-toggle-row bk-opts" style="flex-wrap:wrap;">' +
-            '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkNever">不下載</button>' +
-            '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkSame">一致時不下載</button>' +
-            '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkEdit">僅學生資料不同時不下載</button>' +
-            '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkAlways">永遠下載</button>' +
-          '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">決定拉取（會取代這台資料）前要不要先下載本機備份。「僅學生資料不同」：差異只在學生編輯視窗的內容時不下載；學校、簡寫清單、群組有差異，或學生人數不同仍會下載。</div>' +
-          '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
-            '<button type="button" class="btn btn-sm" id="btnSyncTest">連線測試</button>' +
-            '<button type="button" class="btn btn-sm" id="btnSyncPush">推送到雲端</button>' +
-            '<button type="button" class="btn btn-sm" id="btnSyncPull">從雲端拉取</button>' +
-            '<button type="button" class="btn btn-sm" id="btnSyncClear">清除連線資料</button>' +
-          '</div>' +
-          '<div id="syncStatus" style="font-size:12.5px; color:var(--ink-soft); margin:6px 0 12px; white-space:pre-line;"></div>' +
+            '</div>' +
+          '</details>' +
           '<div class="fieldset-title">儲存空間</div>' +
           '<div class="storage-usage-box" id="storageUsageBox">' +
             '<div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width:0%;"></div></div>' +
@@ -6194,6 +6235,8 @@
             const tab = document.querySelector('.settings-tabs .settings-tab[data-page="' + it.page + '"]');
             if(tab) tab.click();
             const target = it.el.closest(".setting-row") || it.el;
+            const fold = target.closest("details.settings-fold");
+            if(fold) fold.open = true;          // 項目在收合的區塊裡時先展開
             target.scrollIntoView({ block: "center", behavior: motionOn("scroll") ? "smooth" : "auto" });
             target.classList.remove("setting-flash");
             void target.offsetWidth;
@@ -6253,6 +6296,11 @@
     })();
 
     document.getElementById("btnExportDiag").addEventListener("click", exportDiagnostics);
+
+    // 進階頁區塊：記住展開／收合
+    document.querySelectorAll("details.settings-fold").forEach(function(d){
+      d.addEventListener("toggle", function(){ advFoldSave(d.dataset.fold, d.open); });
+    });
 
     // 設定備份
     document.getElementById("btnSettingsExport").addEventListener("click", function(){ exportSettingsFile(); });
