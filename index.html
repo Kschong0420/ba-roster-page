@@ -1029,32 +1029,38 @@
   }
   @media (hover:none){ .avatar-remove{ opacity:1; pointer-events:auto; } }
   .avatar-actions .name-row-icons{ justify-content:center; min-height:24px; }
-  /* 圖片右上角的迷你選單：形態 1／2、新增形態、移除圖片 */
-  .avatar-menu{ position:absolute; top:3px; right:3px; z-index:4; }
+  /* 圖片右上角的迷你選單：形態 1／2、新增形態、移除圖片。
+     ▾ 按鈕只在滑鼠移到圖片上（或選單開著、或鍵盤聚焦）時出現；觸控裝置沒有 hover，所以一直顯示。
+     選單每個選項的寬度 = ▾ 按鈕的寬度（--am-w） */
+  .avatar-menu{
+    --am-w:26px; position:absolute; top:3px; right:3px; z-index:4; width:var(--am-w);
+    opacity:0; pointer-events:none; transition:opacity .12s;
+  }
+  .avatar-wrap:hover .avatar-menu, .avatar-menu.open{ opacity:1; pointer-events:auto; }
+  .avatar-menu:has(:focus-visible){ opacity:1; pointer-events:auto; }   /* 只有鍵盤操作的焦點才保持顯示，滑鼠點過不會黏住 */
+  @media (hover:none){ .avatar-menu{ opacity:1; pointer-events:auto; } }
   .avatar-menu-btn{
-    min-width:18px; height:18px; padding:0 5px; border:none; border-radius:999px;
-    background:rgba(0,0,0,.6); color:#fff; font:700 10px/18px inherit; cursor:pointer;
-    display:flex; align-items:center; justify-content:center; gap:2px;
+    width:100%; height:20px; padding:0; border:none; border-radius:6px;
+    background:rgba(0,0,0,.6); color:#fff; font:700 11px/1 inherit; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
   }
   .avatar-menu-btn:hover, .avatar-menu-btn[aria-expanded="true"]{ background:var(--accent); }
   .avatar-menu-list{
-    position:absolute; top:22px; right:0; display:flex; flex-direction:column; gap:2px; padding:3px;
-    background:var(--panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 6px 18px rgba(15,20,35,.28);
+    position:absolute; top:23px; right:0; width:100%; display:flex; flex-direction:column; gap:2px;
+    padding:0; background:none; border:none; box-shadow:none;
   }
   .avatar-menu-list[hidden]{ display:none; }
   .avatar-menu-list .am-item{
-    position:static; opacity:1; pointer-events:auto; width:28px; height:24px; padding:0; border:none; border-radius:6px;
-    display:flex; align-items:center; justify-content:center; background:var(--soft-bg); color:var(--ink);
-    font:700 12px/1 inherit; cursor:pointer;
+    position:static; left:auto; bottom:auto; transform:none; opacity:1; pointer-events:auto;
+    box-sizing:border-box; width:100%; height:24px; padding:0; border:1px solid var(--border); border-radius:6px;
+    display:flex; align-items:center; justify-content:center; background:var(--panel); color:var(--ink);
+    font:700 12px/1 inherit; cursor:pointer; box-shadow:0 2px 8px rgba(15,20,35,.22);
   }
-  .avatar-menu-list .am-item:hover:not(:disabled){ background:var(--accent); color:#fff; }
-  .avatar-menu-list .am-item.active{ background:var(--accent); color:#fff; }
+  .avatar-menu-list .am-item:hover:not(:disabled){ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .avatar-menu-list .am-item.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
   .avatar-menu-list .am-item:disabled{ opacity:.35; cursor:not-allowed; }
-  .avatar-menu-list .avatar-remove:hover{ background:var(--danger); color:#fff; }
-  .avatar-menu-list .avatar-undo{
-    position:static; left:auto; bottom:auto; transform:none; padding:0; border-radius:6px; box-shadow:none;
-    background:var(--soft-bg); color:var(--ink); font:700 14px/1 inherit;
-  }
+  .avatar-menu-list .avatar-remove:hover{ background:var(--danger); border-color:var(--danger); color:#fff; }
+  .avatar-menu-list .avatar-undo{ font-size:14px; }
   .avatar-corner{ position:absolute; left:4px; bottom:4px; z-index:2; padding:1px 7px; border-radius:999px; background:var(--accent); color:#fff;
     font:700 11px var(--mono); box-shadow:0 1px 4px rgba(0,0,0,.35); pointer-events:none; }
   .avatar-corner[hidden]{ display:none; }
@@ -8138,68 +8144,95 @@
     const avatarCtl = setupAvatarUpload(editingForm === 2 ? st.avatar2 : st.avatar);
     document.getElementById("f_name2").value = st.name2 || "";
     const showEl = function(id, on){ const e = document.getElementById(id); if(e) e.style.display = on ? "" : "none"; };
-    // 形態 2 只有「按＋後、有上傳圖片」才會留下來；沒有圖片就關閉、或按 ✕，都回到只有形態 1
-    let removedForm2 = null;     // 剛被刪掉的形態 2（圖片與名字），可用選單的「↶」放回來
-    let undoKind = null;         // 最近一次可復原的是 "form2"（刪形態 2）還是 "image"（移除圖片）
+    // 形態 2 只有「按＋後、有上傳圖片」才會留下來；沒有圖片就關閉、或按 ✕，都回到只有形態 1。
+    // 刪掉形態 1（且形態 2 有圖片）時，形態 2 接替成為形態 1。
+    // 「↶」的順序：從最近一次動作往回（移除圖片／刪形態 2／刪形態 1）
+    let undoStack = [];
+    const topUndo = function(){ return undoStack.length ? undoStack[undoStack.length - 1] : null; };
+    // 重新顯示目前形態的圖片，並清掉「移除圖片」留下的復原（原本的復原只記得一次）
+    function resetAvatarUi(){
+      undoStack = undoStack.filter(function(e){ return e.type !== "image"; });
+      avatarCtl.reset();
+    }
     function refreshFormUi(){
       const nm1 = document.getElementById("f_name"), nm2 = document.getElementById("f_name2");
       const on2 = hasForm2 && editingForm === 2;
+      const canPromote = hasForm2 && editingForm === 1 && !!formImgs[2];     // 刪掉形態 1，形態 2 可以接替
       showEl("amForm1", hasForm2); showEl("amForm2", hasForm2);
       showEl("amAdd", !hasForm2 && !isBorrowedMode);
       [1, 2].forEach(function(n){ const b = document.getElementById("amForm" + n); if(b) b.classList.toggle("active", editingForm === n); });
-      // ✕：看形態 2 時 = 刪掉形態 2（沒有圖片也能按，用來取消）；看形態 1 時 = 移除圖片（有圖片才顯示）
+      // ✕：看形態 2 時 = 刪掉形態 2（沒有圖片也能按，用來取消）；看形態 1 時，若形態 2 有圖片 = 刪掉形態 1、形態 2 接替；其餘 = 移除圖片（有圖片才顯示）
       const rm = document.getElementById("removeAvatarBtn");
       if(rm){
-        rm.title = on2 ? "刪除形態 2" : "移除卡片圖片"; rm.setAttribute("aria-label", rm.title);
-        rm.style.display = (on2 || currentAvatarData) ? "" : "none";
+        rm.title = on2 ? "刪除形態 2" : (canPromote ? "刪除形態 1（形態 2 會變成形態 1）" : "移除卡片圖片");
+        rm.setAttribute("aria-label", rm.title);
+        rm.style.display = (on2 || canPromote || currentAvatarData) ? "" : "none";
       }
       // 形態 2 時，名字欄換成形態 2 自己的名字（留空 = 沿用形態 1，灰字顯示形態 1 的名字）
       showEl("f_name", !on2); showEl("f_name2", on2);
       document.getElementById("nameFieldLabel").setAttribute("for", on2 ? "f_name2" : "f_name");
       nm2.placeholder = nm1.value.trim();
-      // ↶：剛刪掉形態 2、或剛移除圖片時才出現
-      const undo = document.getElementById("undoAvatarBtn");
-      if(undo) undo.style.display = ((removedForm2 && !hasForm2) || avatarCtl.canUndo()) ? "" : "none";
+      // ↶：最近一次動作可以復原時才出現
+      const undo = document.getElementById("undoAvatarBtn"), top = topUndo();
+      if(undo) undo.style.display = (top && top.type !== "image") || avatarCtl.canUndo() ? "" : "none";
     }
+    function fireChange(){ document.getElementById("avatarUpload").dispatchEvent(new Event("change", { bubbles: true })); }   // 讓自動儲存與「有沒有改過」跟上
     function switchForm(n){
       if(n === editingForm) return;
       formImgs[editingForm] = currentAvatarData;     // 先記下目前形態的圖片
       editingForm = n;
       currentAvatarData = formImgs[n] || null;
-      avatarCtl.reset();
-      refreshFormUi();
-      document.getElementById("avatarUpload").dispatchEvent(new Event("change", { bubbles: true }));   // 讓自動儲存與「有沒有改過」跟上
+      resetAvatarUi(); refreshFormUi(); fireChange();
     }
     function deleteForm2(){
       const img = currentAvatarData, nm = document.getElementById("f_name2").value.trim();   // 正在看形態 2，所以目前的圖片就是形態 2 的
-      removedForm2 = (img || nm) ? { img: img || null, name2: nm } : null;                  // 還沒填任何東西的形態 2，沒什麼好復原的
-      undoKind = removedForm2 ? "form2" : null;
+      if(img || nm) undoStack.push({ type: "form2", data: { img: img || null, name2: nm } }); // 還沒填任何東西的形態 2，沒什麼好復原的
       hasForm2 = false; formImgs[2] = null; document.getElementById("f_name2").value = "";
       editingForm = 1; currentAvatarData = formImgs[1] || null;
-      avatarCtl.reset(); refreshFormUi();
-      document.getElementById("avatarUpload").dispatchEvent(new Event("change", { bubbles: true }));
+      resetAvatarUi(); refreshFormUi(); fireChange();
     }
-    function restoreForm2(){
-      hasForm2 = true; formImgs[2] = removedForm2.img; document.getElementById("f_name2").value = removedForm2.name2 || "";
-      removedForm2 = null; undoKind = null;
+    function restoreForm2(d){
+      hasForm2 = true; formImgs[2] = d.img; document.getElementById("f_name2").value = d.name2 || "";
       switchForm(2);
+    }
+    // 刪掉形態 1：形態 2 的圖片與名字變成形態 1（形態 2 沒填名字就保留原本的名字）
+    function promoteForm2(){
+      const nm = document.getElementById("f_name"), nm2 = document.getElementById("f_name2");
+      undoStack.push({ type: "promote", data: { img1: currentAvatarData, name1: nm.value, img2: formImgs[2], name2: nm2.value } });
+      currentAvatarData = formImgs[2] || null;
+      if(nm2.value.trim()) nm.value = nm2.value.trim();
+      hasForm2 = false; formImgs[2] = null; nm2.value = ""; editingForm = 1;
+      resetAvatarUi(); refreshFormUi(); fireChange();
+    }
+    function restorePromote(d){
+      hasForm2 = true; formImgs[2] = d.img2;
+      document.getElementById("f_name").value = d.name1; document.getElementById("f_name2").value = d.name2;
+      currentAvatarData = d.img1; editingForm = 1;
+      resetAvatarUi(); refreshFormUi(); fireChange();
     }
     // 迷你選單：開關、點外面或按 Esc 關閉、點選項後關閉
     (function(){
       const menuBtn = document.getElementById("avatarMenuBtn"), menuList = document.getElementById("avatarMenuList");
-      function setOpen(on){ menuList.hidden = !on; menuBtn.setAttribute("aria-expanded", on ? "true" : "false"); }
+      const menuBox = document.getElementById("avatarMenu");
+      function setOpen(on){
+        menuList.hidden = !on; menuBtn.setAttribute("aria-expanded", on ? "true" : "false");
+        menuBox.classList.toggle("open", on);     // 開著時一直顯示，滑鼠移到選項上也不會消失
+      }
       menuBtn.addEventListener("click", function(e){ e.stopPropagation(); setOpen(menuList.hidden); });
-      // 用捕獲階段：在選項本身處理之前先收起；看形態 2 時 ✕ 改成「刪掉形態 2」，並擋下原本的「移除圖片」
+      // 用捕獲階段：在選項本身處理之前先收起，並決定 ✕、↶ 這一下要做什麼（需要時擋下原本的「移除／復原圖片」）
       menuList.addEventListener("click", function(e){
         const btn = e.target.closest("button:not(:disabled)");
         if(!btn) return;
         setOpen(false);
         if(btn.id === "removeAvatarBtn"){
           if(hasForm2 && editingForm === 2){ e.stopPropagation(); deleteForm2(); }
-          else undoKind = "image";           // 形態 1 的 ✕ = 移除圖片，由原本的處理執行
+          else if(hasForm2 && editingForm === 1 && formImgs[2]){ e.stopPropagation(); promoteForm2(); }
+          else undoStack.push({ type: "image" });          // 一般的移除圖片，由原本的處理執行
         } else if(btn.id === "undoAvatarBtn"){
-          if(undoKind === "form2" && removedForm2 && !hasForm2){ e.stopPropagation(); restoreForm2(); }
-          else undoKind = (removedForm2 && !hasForm2) ? "form2" : null;   // 復原圖片後，若還有被刪的形態 2 可復原就留著「↶」
+          const top = topUndo();
+          if(top && top.type === "form2" && !hasForm2){ e.stopPropagation(); undoStack.pop(); restoreForm2(top.data); }
+          else if(top && top.type === "promote"){ e.stopPropagation(); undoStack.pop(); restorePromote(top.data); }
+          else if(top && top.type === "image"){ undoStack.pop(); }    // 原本的處理會把圖片放回來
         }
       }, true);
       // 原本的移除／復原處理（綁在按鈕本身，且會 stopPropagation）跑完後，重新整理選單。
@@ -8219,7 +8252,7 @@
     refreshFormUi();
     document.getElementById("amForm1").addEventListener("click", function(){ switchForm(1); });
     document.getElementById("amForm2").addEventListener("click", function(){ switchForm(2); });
-    document.getElementById("amAdd").addEventListener("click", function(){ if(hasForm2) return; removedForm2 = null; hasForm2 = true; switchForm(2); });
+    document.getElementById("amAdd").addEventListener("click", function(){ if(hasForm2) return; undoStack = []; hasForm2 = true; switchForm(2); });
     if(!navPrevStudent && navNextStudent){
       overlay.insertAdjacentHTML("afterbegin", '<button type="button" class="modal-nav-arrow modal-nav-prev modal-nav-placeholder" aria-hidden="true" tabindex="-1" disabled></button>');
     }
