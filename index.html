@@ -1079,7 +1079,7 @@
   .export-avatar img{ width:100%; height:100%; object-fit:cover; display:block; -webkit-user-drag:none; user-select:none; pointer-events:none; }
   .export-avatar-ph{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--muted-icon); }
   .export-avatar.active{ border-color: var(--accent); box-shadow:0 0 0 2px rgba(58,110,165,.25); }
-  .export-avatar-wrap{ display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+  .export-avatar-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
   .export-avatar-wrap.dragging{
     opacity:.9; box-shadow:0 6px 14px rgba(0,0,0,.25); z-index:6; position:relative; cursor:grabbing;
     user-select:none; -webkit-user-select:none;
@@ -1099,6 +1099,14 @@
     background:var(--accent); color:#fff; font-size:11px; font-weight:800; line-height:18px; text-align:center;
     z-index:2; pointer-events:none;
   }
+  /* 輸出視窗：頭像右上角的形態切換鈕（只有有形態 2 的角色才會出現） */
+  .form-switch-btn{
+    position:absolute; top:-5px; right:-5px; z-index:3; min-width:20px; height:20px; padding:0 5px;
+    border:1.5px solid var(--panel); border-radius:10px; background:rgba(0,0,0,.65); color:#fff;
+    font:800 11px/17px var(--mono); text-align:center; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.35);
+  }
+  .form-switch-btn:hover{ background:var(--accent); }
+  .form-switch-btn.f2{ background:var(--accent); }
   .sp-name{ font-size:10.5px; color:var(--ink-soft); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
   .sp-bg-row{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:center; margin-bottom:10px; }
   .sp-bg-info{ font-size:12px; color:var(--ink-soft); width:100%; text-align:center; }
@@ -1829,6 +1837,7 @@
     skillPrioRatio: "16:9",      // "16:9" | "4:3" | "1:1" | "bg" (follow the background image) | "custom"
     skillPrioCustomW: 16,
     skillPrioCustomH: 9,
+    outputFormPersist: false,    // 輸出視窗切換角色形態時，是否同時儲存為角色的預設形態
     skillPrioNameStyle: "prefix", // "prefix" (S.Mika) | "full" (Mika (Swimsuit))
     skillPrioTitleLang: "zh",    // "zh" | "en" — language of the title drawn on the image
     skillPrioTitleFont: "system", // id from SP_FONTS
@@ -1919,6 +1928,7 @@
     skillPrioRatio: { label: "技能優先級圖片比例", map: { "16:9": "16:9", "4:3": "4:3", "1:1": "1:1", bg: "跟隨背景圖片", custom: "自訂" } },
     skillPrioCustomW: { label: "技能優先級自訂比例（寬）" },
     skillPrioCustomH: { label: "技能優先級自訂比例（高）" },
+    outputFormPersist: { label: "輸出時切換形態", bool: ["只影響這次輸出", "同時儲存為預設"] },
     skillPrioNameStyle: { label: "技能優先級文字名字顯示", map: { prefix: "前綴＋名字", full: "完整顯示" } },
     skillPrioTitleLang: { label: "技能優先級標題與文字語言", map: { zh: "中文", en: "English" } },
     skillPrioFrameStyle: { label: "技能優先級圖片邊框樣式", map: { stripe: "條紋", metal: "金屬", plastic: "塑料", flat: "純色", gradient: "漸層", glass: "玻璃", neon: "霓虹", retro: "復古", dots: "圓點", shine: "閃耀" } },
@@ -6828,6 +6838,8 @@
       updateSpFontPreview();
       document.getElementById("st_spNamePrefix").classList.toggle("active", draft.skillPrioNameStyle !== "full");
       document.getElementById("st_spNameFull").classList.toggle("active", draft.skillPrioNameStyle === "full");
+      document.getElementById("st_formPersistOff").classList.toggle("active", !draft.outputFormPersist);
+      document.getElementById("st_formPersistOn").classList.toggle("active", !!draft.outputFormPersist);
     }
     document.getElementById("st_spFollowOn").addEventListener("click", function(){
       if(!draft.skillPrioBgFollowUi){ draft.skillPrioBgFollowUi = true; markDirty(); refreshSkillPrioButtons(); }
@@ -6861,6 +6873,12 @@
     });
     document.getElementById("st_spNameFull").addEventListener("click", function(){
       if(draft.skillPrioNameStyle !== "full"){ draft.skillPrioNameStyle = "full"; markDirty(); refreshSkillPrioButtons(); }
+    });
+    document.getElementById("st_formPersistOff").addEventListener("click", function(){
+      if(draft.outputFormPersist){ draft.outputFormPersist = false; markDirty(); refreshSkillPrioButtons(); }
+    });
+    document.getElementById("st_formPersistOn").addEventListener("click", function(){
+      if(!draft.outputFormPersist){ draft.outputFormPersist = true; markDirty(); refreshSkillPrioButtons(); }
     });
 
     function updateSpFontPreview(){
@@ -9165,6 +9183,31 @@
     let viewMode = "avatar";   // "avatar" | "list" | "abbrev" | "priority"
     let activeId = selected[0].id;
     let activePage = 1;
+    // 形態切換：預設只改這次輸出用的暫存資料（selected 是從資料庫讀出的副本），
+    // 「通用設定 › 輸出模式 › 輸出通用」開啟 outputFormPersist 時才會寫回 activeForm。
+    let formPersistDirty = false;
+    function makeFormSwitchBtn(s){
+      if(!s || isBorrowed(s) || !studentHasForm2(s)) return null;
+      const on2 = s.activeForm === 2;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "form-switch-btn" + (on2 ? " f2" : "");
+      b.textContent = on2 ? "2" : "1";
+      b.title = "目前：形態 " + (on2 ? 2 : 1) + "，點擊切換";
+      b.setAttribute("aria-label", studentFullName(s) + "，目前形態 " + (on2 ? 2 : 1) + "，點擊切換");
+      // 不要觸發外層頭像的長按拖曳排序
+      b.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+      b.addEventListener("click", async function(e){
+        e.stopPropagation();
+        s.activeForm = s.activeForm === 2 ? 1 : 2;
+        if(appSettings.outputFormPersist){
+          try{ await putStudent(s); formPersistDirty = true; }
+          catch(err){ showToast("儲存形態失敗，只套用在這次輸出"); }
+        }
+        render();
+      });
+      return b;
+    }
     // What 複製 / 自動複製 actually copy. Borrowed students' lines are shown
     // on screen but never go in here (and can't be selected either).
     let copyText = "";
@@ -9516,7 +9559,7 @@
           // syncSelectedOrderFromDOM), but the 撤銷模式 grid underneath was
           // rendered before that reorder happened — refresh it now so its
           // card order and position numbers (data-order) match.
-          if(deselectMode) renderMain();
+          if(deselectMode || formPersistDirty) renderMain();
         } }
     );
 
@@ -9657,6 +9700,8 @@
           render();
         });
         wrap.appendChild(btn);
+        const fsBtn = makeFormSwitchBtn(st);
+        if(fsBtn) wrap.appendChild(fsBtn);
         if(picked){
           const badge = document.createElement("span");
           badge.className = "sp-badge";
@@ -10359,6 +10404,8 @@
         $("spLangEn").classList.toggle("active", appSettings.skillPrioTitleLang === "en");
         $("spNamePrefix").classList.toggle("active", appSettings.skillPrioNameStyle !== "full");
         $("spNameFull").classList.toggle("active", appSettings.skillPrioNameStyle === "full");
+        $("formPersistOff").classList.toggle("active", !appSettings.outputFormPersist);
+        $("formPersistOn").classList.toggle("active", !!appSettings.outputFormPersist);
         preview();
       }
       // kind: "text" → the text output changes, otherwise only the picture does.
@@ -10382,6 +10429,14 @@
           reveal();
         });
       });
+      function setFormPersist(v){
+        if(!!appSettings.outputFormPersist === v) return;
+        appSettings.outputFormPersist = v;
+        saveSettings(appSettings);
+        sync();
+      }
+      $("formPersistOff").addEventListener("click", function(){ setFormPersist(false); });
+      $("formPersistOn").addEventListener("click", function(){ setFormPersist(true); });
       $("spNamePrefix").addEventListener("click", function(){ if(appSettings.skillPrioNameStyle === "full") change({ skillPrioNameStyle: "prefix" }, "text"); });
       $("spNameFull").addEventListener("click", function(){ if(appSettings.skillPrioNameStyle !== "full") change({ skillPrioNameStyle: "full" }, "text"); });
       $("spLangZh").addEventListener("click", function(){ if(appSettings.skillPrioTitleLang === "en") change({ skillPrioTitleLang: "zh" }, "text"); });
@@ -10522,6 +10577,8 @@
           render();
         });
         wrap.appendChild(btn);
+        const fsBtn = makeFormSwitchBtn(s);
+        if(fsBtn) wrap.appendChild(fsBtn);
 
         makeExportAvatarDraggable(wrap);
         avatarRow.appendChild(wrap);
@@ -10634,6 +10691,12 @@
         '<button type="button" class="output-subtab" data-osub="font">字體</button>' +
       '</div>' +
       '<div class="output-subpage" data-osub="general">' +
+        '<div class="fieldset-title">輸出時切換角色形態</div>' +
+        '<div class="theme-toggle-row">' +
+          '<button type="button" class="btn btn-sm theme-opt' + on(!c.outputFormPersist) + '" id="' + p + 'formPersistOff">只影響這次輸出</button>' +
+          '<button type="button" class="btn btn-sm theme-opt' + on(!!c.outputFormPersist) + '" id="' + p + 'formPersistOn">同時儲存為預設</button>' +
+        '</div>' +
+        '<div class="variant-group-note" style="margin-top:-6px;">在輸出視窗點頭像右上角的 1／2 切換形態時：前者關掉視窗就恢復；後者會改寫角色的預設形態，主畫面卡片也會跟著換。</div>' +
         '<div class="fieldset-title sp-text-only">技能優先級：文字輸出的名字顯示</div>' +
         '<div class="theme-toggle-row sp-text-only">' +
           '<button type="button" class="btn btn-sm theme-opt' + on(c.skillPrioNameStyle !== "full") + '" id="' + p + 'spNamePrefix">前綴＋名字</button>' +
