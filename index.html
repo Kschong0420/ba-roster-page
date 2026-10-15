@@ -1023,12 +1023,38 @@
   .avatar-wrap:hover .avatar-remove, .avatar-remove:focus-visible{ opacity:1; pointer-events:auto; }
   .avatar-remove:hover{ background:var(--danger); }
   .avatar-undo{
-    position:absolute; top:3px; right:3px; z-index:3; padding:2px 8px; border:none; border-radius:999px;
+    position:absolute; left:50%; bottom:6px; transform:translateX(-50%); z-index:3; white-space:nowrap; padding:2px 8px; border:none; border-radius:999px;
     background:var(--accent); color:#fff; font-size:11px; font-weight:700; line-height:1.4; cursor:pointer;
     box-shadow:0 1px 4px rgba(0,0,0,.35);
   }
   @media (hover:none){ .avatar-remove{ opacity:1; pointer-events:auto; } }
   .avatar-actions .name-row-icons{ justify-content:center; min-height:24px; }
+  /* 圖片右上角的迷你選單：形態 1／2、新增形態、移除圖片 */
+  .avatar-menu{ position:absolute; top:3px; right:3px; z-index:4; }
+  .avatar-menu-btn{
+    min-width:18px; height:18px; padding:0 5px; border:none; border-radius:999px;
+    background:rgba(0,0,0,.6); color:#fff; font:700 10px/18px inherit; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:2px;
+  }
+  .avatar-menu-btn:hover, .avatar-menu-btn[aria-expanded="true"]{ background:var(--accent); }
+  .avatar-menu-list{
+    position:absolute; top:22px; right:0; display:flex; flex-direction:column; gap:2px; padding:3px;
+    background:var(--panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 6px 18px rgba(15,20,35,.28);
+  }
+  .avatar-menu-list[hidden]{ display:none; }
+  .avatar-menu-list .am-item{
+    position:static; opacity:1; pointer-events:auto; width:28px; height:24px; padding:0; border:none; border-radius:6px;
+    display:flex; align-items:center; justify-content:center; background:var(--soft-bg); color:var(--ink);
+    font:700 12px/1 inherit; cursor:pointer;
+  }
+  .avatar-menu-list .am-item:hover:not(:disabled){ background:var(--accent); color:#fff; }
+  .avatar-menu-list .am-item.active{ background:var(--accent); color:#fff; }
+  .avatar-menu-list .am-item:disabled{ opacity:.35; cursor:not-allowed; }
+  .avatar-menu-list .avatar-remove:hover{ background:var(--danger); color:#fff; }
+  .avatar-menu-list .avatar-undo{
+    position:static; left:auto; bottom:auto; transform:none; padding:0; border-radius:6px; box-shadow:none;
+    background:var(--soft-bg); color:var(--ink); font:700 14px/1 inherit;
+  }
   .avatar-corner{ position:absolute; left:4px; bottom:4px; z-index:2; padding:1px 7px; border-radius:999px; background:var(--accent); color:#fff;
     font:700 11px var(--mono); box-shadow:0 1px 4px rgba(0,0,0,.35); pointer-events:none; }
   .avatar-corner[hidden]{ display:none; }
@@ -2596,6 +2622,24 @@
     return student.variantGroupId || null;
   }
 
+  // 學生目前使用的卡片圖片：有第二形態圖片、且目前選的是形態 2 時用第二張，其餘用第一張。
+  // 其他資料（好感度、等級、技能…）兩個形態共用同一筆。舊資料沒有 avatar2／activeForm，會自動當成形態 1。
+  function studentHasForm2(st){ return !!(st && (st.hasForm2 || st.avatar2 || st.name2)); }
+  function studentAvatar(st){
+    if(!st) return null;
+    return (studentHasForm2(st) && st.activeForm === 2 && st.avatar2) ? st.avatar2 : (st.avatar || null);
+  }
+  // 目前形態的顯示名字（形態 2 沒填名字就沿用形態 1 的）。排序、搜尋、變體群組仍以 name（形態 1）為準
+  function studentName(st){
+    if(!st) return "";
+    return (studentHasForm2(st) && st.activeForm === 2 && st.name2) ? st.name2 : st.name;
+  }
+  // 顯示用的學生資料：名字換成目前形態的名字（其餘欄位不變）
+  function studentView(st){
+    const nm = studentName(st);
+    return nm === st.name ? st : Object.assign({}, st, { name: nm });
+  }
+
   // 借用學生: only an avatar and a name, no growth data, never shares an
   // affinity/variant group with anyone, and at most one may exist at a time.
   function isBorrowed(st){ return !!(st && st.borrowed); }
@@ -3656,7 +3700,7 @@
     const q = searchQuery.toLowerCase();
     const all = await getAllStudents();
     const rawMatches = all
-      .filter(function(s){ return (s.name || "").toLowerCase().includes(q); })
+      .filter(function(s){ return (s.name || "").toLowerCase().includes(q) || (s.name2 || "").toLowerCase().includes(q); })
       .sort(function(a,b){ return a.name.localeCompare(b.name, "zh-Hant"); });
     const matches = applyStudentFilter(rawMatches);
 
@@ -3801,7 +3845,8 @@
   // (e.g. "T.Shiroko") — there's no meaning to safely guess or split off.
   // The name spelled out for assistive tech and tooltips: "Mika (Swimsuit)" for "S.Mika" when the
   // abbreviation list knows what S means, otherwise just the name as typed.
-  function studentFullName(st){
+  function studentFullName(st0){
+    const st = studentView(st0);
     const parts = buildFullNameParts(st);
     return parts.meaning ? parts.base + " (" + parts.meaning + ")" : st.name;
   }
@@ -3983,11 +4028,12 @@
     const card = document.createElement("div");
     card.className = "avatar-card";
     card.dataset.studentId = st.id;
-    const nameParts = buildFullNameParts(st);
-    const fullNm = nameParts.meaning ? nameParts.base + " (" + nameParts.meaning + ")" : st.name;
-    const inner = st.avatar
-      ? '<img src="' + st.avatar + '" alt="' + escapeHtml(fullNm) + '" draggable="false">'
-      : '<div class="ph">' + escapeHtml((st.name||"?").slice(0,1)) + '</div>';
+    const view = studentView(st);   // 目前形態的名字（編輯用的 st 不動）
+    const nameParts = buildFullNameParts(view);
+    const fullNm = nameParts.meaning ? nameParts.base + " (" + nameParts.meaning + ")" : view.name;
+    const inner = studentAvatar(st)
+      ? '<img src="' + studentAvatar(st) + '" alt="' + escapeHtml(fullNm) + '" draggable="false">'
+      : '<div class="ph">' + escapeHtml((view.name||"?").slice(0,1)) + '</div>';
     let nameTagText = cardDisplayMode === "affinity"
       ? (function(){
           const affMax = computeAffinityMax(st.weaponStar);
@@ -4031,9 +4077,9 @@
           : (function(){
               if(nameCardStyle !== "full"){
                 // Short name shown: hovering (or a screen reader) still gets the full name.
-                return fullNm !== st.name
-                  ? '<abbr class="name-abbr" title="' + escapeHtml(fullNm) + '">' + escapeHtml(st.name) + '</abbr>'
-                  : escapeHtml(st.name);
+                return fullNm !== view.name
+                  ? '<abbr class="name-abbr" title="' + escapeHtml(fullNm) + '">' + escapeHtml(view.name) + '</abbr>'
+                  : escapeHtml(view.name);
               }
               const parts = nameParts;
               if(!parts.meaning) return escapeHtml(parts.base);
@@ -4065,7 +4111,7 @@
       card.addEventListener("click", function(){
         if(card.dataset.dragMoved === "1"){ card.dataset.dragMoved = "0"; return; }
         cancelCardJumpAnimation();
-        toggleSelectStudent(st.id, st.name);
+        toggleSelectStudent(st.id, view.name);
       });
       if(opts.reorderable){
         card.classList.add("reorderable");
@@ -6421,27 +6467,31 @@
       btn.disabled = true;
       try{
         const all = await getAllStudents();
-        const targets = all.filter(function(st){ return typeof st.avatar === "string" && /^data:image\/(png|jpeg);/.test(st.avatar); });
+        const isConv = function(v){ return typeof v === "string" && /^data:image\/(png|jpeg);/.test(v); };
+        const targets = all.filter(function(st){ return isConv(st.avatar) || isConv(st.avatar2); });
         let converted = 0, skipped = 0, savedBytes = 0;
         for(let i = 0; i < targets.length; i++){
           say("轉換中… " + (i + 1) + " / " + targets.length);
           const st = targets[i];
-          try{
-            const img = await new Promise(function(res, rej){
-              const im = new Image(); im.onload = function(){ res(im); }; im.onerror = rej; im.src = st.avatar;
-            });
-            const c = document.createElement("canvas");
-            c.width = img.naturalWidth; c.height = img.naturalHeight;
-            c.getContext("2d").drawImage(img, 0, 0);
-            const webp = c.toDataURL("image/webp", 0.9);
-            if(!/^data:image\/webp/.test(webp)){ say("此瀏覽器不支援輸出 WebP，無法轉換。"); btn.disabled = false; return; }
-            if(webp.length < st.avatar.length){
-              savedBytes += st.avatar.length - webp.length;
-              st.avatar = webp;
-              await putStudent(st);
-              converted++;
-            } else { skipped++; }
-          } catch(_){ skipped++; }
+          let changed = false;
+          for(const field of ["avatar", "avatar2"]){
+            if(!isConv(st[field])) continue;
+            try{
+              const img = await new Promise(function(res, rej){
+                const im = new Image(); im.onload = function(){ res(im); }; im.onerror = rej; im.src = st[field];
+              });
+              const c = document.createElement("canvas");
+              c.width = img.naturalWidth; c.height = img.naturalHeight;
+              c.getContext("2d").drawImage(img, 0, 0);
+              const webp = c.toDataURL("image/webp", 0.9);
+              if(!/^data:image\/webp/.test(webp)){ say("此瀏覽器不支援輸出 WebP，無法轉換。"); btn.disabled = false; return; }
+              if(webp.length < st[field].length){
+                savedBytes += st[field].length - webp.length;
+                st[field] = webp; changed = true; converted++;
+              } else { skipped++; }
+            } catch(_){ skipped++; }
+          }
+          if(changed) await putStudent(st);
         }
         say("完成：已轉換 " + converted + " 張，略過 " + skipped + " 張（轉換後沒有比較小或無法讀取）；共節省約 " + (savedBytes / 1024).toFixed(0) + " KB。");
         if(converted) renderMain();
@@ -7564,6 +7614,11 @@
       refresh();
       box.dispatchEvent(new Event("change", { bubbles: true }));
     });
+    // 切換形態時由外部呼叫：重新顯示目前的圖片，並清掉上一個形態留下的「復原」
+    return {
+      reset: function(){ removedAvatarData = null; refresh(); },
+      canUndo: function(){ return !currentAvatarData && !!removedAvatarData; }
+    };
   }
 
   async function openStudentModal(student, navOpts){
@@ -7587,6 +7642,15 @@
     else if(!st.skillSub) st.skillSub = 1;
     const modalSchoolId = isNew ? currentSchoolId : st.schoolId;
     let isBorrowedMode = !!st.borrowed;
+    // 兩個形態的卡片圖片：formImgs 存「沒在編輯的那個」，編輯中的圖片放在 currentAvatarData
+    let hasForm2 = studentHasForm2(st);
+    let editingForm = (hasForm2 && st.activeForm === 2) ? 2 : 1;
+    const formImgs = { 1: st.avatar || null, 2: st.avatar2 || null };
+    function currentForms(){
+      const f = { 1: formImgs[1], 2: formImgs[2] };
+      f[editingForm] = currentAvatarData;
+      return f;
+    }
 
     // 上一位/下一位 navigation: based on whichever grid view (school/attribute/
     // all students/search/撤銷模式) was on screen when this modal was opened.
@@ -7819,8 +7883,16 @@
             '<div id="avatarPlaceholder">' + (window.matchMedia && window.matchMedia("(pointer:coarse)").matches ? '點擊從相簿<br>或相機選擇圖片' : '點擊選擇圖片<br>或直接貼上剪貼簿圖片<br>(Ctrl+V)') + '</div>' +
           '</div>' +
           '<input type="file" id="avatarFileInput" accept="image/*" style="display:none">' +
-          '<button type="button" class="avatar-remove" id="removeAvatarBtn" title="移除卡片圖片" aria-label="移除卡片圖片" style="display:none">✕</button>' +
-          '<button type="button" class="avatar-undo" id="undoAvatarBtn" title="復原剛才移除的卡片圖片" style="display:none">↶ 復原</button>' +
+          '<div class="avatar-menu" id="avatarMenu">' +
+            '<button type="button" class="avatar-menu-btn" id="avatarMenuBtn" aria-haspopup="true" aria-expanded="false" title="形態／圖片">▾</button>' +
+            '<div class="avatar-menu-list" id="avatarMenuList" hidden>' +
+              '<button type="button" class="am-item" id="amForm1" title="形態 1" style="display:none;">1</button>' +
+              '<button type="button" class="am-item" id="amForm2" title="形態 2" style="display:none;">2</button>' +
+              '<button type="button" class="am-item" id="amAdd" title="新增形態 2">＋</button>' +
+              '<button type="button" class="avatar-remove am-item" id="removeAvatarBtn" title="移除卡片圖片" aria-label="移除卡片圖片" style="display:none">✕</button>' +
+              '<button type="button" class="avatar-undo am-item" id="undoAvatarBtn" title="復原剛才移除的卡片圖片" aria-label="復原" style="display:none">↶</button>' +
+            '</div>' +
+          '</div>' +
           '</div>' +
           '<div class="avatar-tools">' +
             '<button type="button" class="btn btn-ghost btn-sm" id="avatarPickBtn">選擇圖片</button>' +
@@ -7829,9 +7901,10 @@
           '<div class="avatar-actions"><span class="name-row-icons" id="nameRowIcons">' + nameRowIconsHtml(st.attribute, st.armor) + '</span></div>' +
         '</div>' +
         '<div class="student-edit-basic-col">' +
-          '<div class="field name-field"><label for="f_name">名字</label>' +
+          '<div class="field name-field"><label for="f_name" id="nameFieldLabel">名字</label>' +
           '<div class="name-with-icons-row">' +
             '<input id="f_name" type="text" value="' + escapeHtml(st.name) + '" placeholder="學生名字（例：S.Mika）">' +
+            '<input id="f_name2" type="text" value="' + escapeHtml(st.name2 || "") + '" placeholder="與形態 1 相同" style="display:none;">' +
             '<button type="button" class="name-more-btn ' + (groupViewPopover ? 'shape-round' : 'shape-square') + '" id="btnNameMore" title="同組角色版本 · 好感度參考" aria-label="同組角色版本 · 好感度參考" aria-haspopup="true" aria-expanded="false"' + ((groupAbbrevHasContentInit && !st.borrowed && nameMoreVisibleByMode) ? '' : ' hidden') + '>' + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>' + '</button>' +
           '</div>' +
           '<div class="name-popover" id="namePopover" hidden></div>' +
@@ -8062,7 +8135,91 @@
     }
 
     const modalEl = overlay.querySelector(".modal");
-    setupAvatarUpload(st.avatar);
+    const avatarCtl = setupAvatarUpload(editingForm === 2 ? st.avatar2 : st.avatar);
+    document.getElementById("f_name2").value = st.name2 || "";
+    const showEl = function(id, on){ const e = document.getElementById(id); if(e) e.style.display = on ? "" : "none"; };
+    // 形態 2 只有「按＋後、有上傳圖片」才會留下來；沒有圖片就關閉、或按 ✕，都回到只有形態 1
+    let removedForm2 = null;     // 剛被刪掉的形態 2（圖片與名字），可用選單的「↶」放回來
+    let undoKind = null;         // 最近一次可復原的是 "form2"（刪形態 2）還是 "image"（移除圖片）
+    function refreshFormUi(){
+      const nm1 = document.getElementById("f_name"), nm2 = document.getElementById("f_name2");
+      const on2 = hasForm2 && editingForm === 2;
+      showEl("amForm1", hasForm2); showEl("amForm2", hasForm2);
+      showEl("amAdd", !hasForm2 && !isBorrowedMode);
+      [1, 2].forEach(function(n){ const b = document.getElementById("amForm" + n); if(b) b.classList.toggle("active", editingForm === n); });
+      // ✕：看形態 2 時 = 刪掉形態 2（沒有圖片也能按，用來取消）；看形態 1 時 = 移除圖片（有圖片才顯示）
+      const rm = document.getElementById("removeAvatarBtn");
+      if(rm){
+        rm.title = on2 ? "刪除形態 2" : "移除卡片圖片"; rm.setAttribute("aria-label", rm.title);
+        rm.style.display = (on2 || currentAvatarData) ? "" : "none";
+      }
+      // 形態 2 時，名字欄換成形態 2 自己的名字（留空 = 沿用形態 1，灰字顯示形態 1 的名字）
+      showEl("f_name", !on2); showEl("f_name2", on2);
+      document.getElementById("nameFieldLabel").setAttribute("for", on2 ? "f_name2" : "f_name");
+      nm2.placeholder = nm1.value.trim();
+      // ↶：剛刪掉形態 2、或剛移除圖片時才出現
+      const undo = document.getElementById("undoAvatarBtn");
+      if(undo) undo.style.display = ((removedForm2 && !hasForm2) || avatarCtl.canUndo()) ? "" : "none";
+    }
+    function switchForm(n){
+      if(n === editingForm) return;
+      formImgs[editingForm] = currentAvatarData;     // 先記下目前形態的圖片
+      editingForm = n;
+      currentAvatarData = formImgs[n] || null;
+      avatarCtl.reset();
+      refreshFormUi();
+      document.getElementById("avatarUpload").dispatchEvent(new Event("change", { bubbles: true }));   // 讓自動儲存與「有沒有改過」跟上
+    }
+    function deleteForm2(){
+      const img = currentAvatarData, nm = document.getElementById("f_name2").value.trim();   // 正在看形態 2，所以目前的圖片就是形態 2 的
+      removedForm2 = (img || nm) ? { img: img || null, name2: nm } : null;                  // 還沒填任何東西的形態 2，沒什麼好復原的
+      undoKind = removedForm2 ? "form2" : null;
+      hasForm2 = false; formImgs[2] = null; document.getElementById("f_name2").value = "";
+      editingForm = 1; currentAvatarData = formImgs[1] || null;
+      avatarCtl.reset(); refreshFormUi();
+      document.getElementById("avatarUpload").dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    function restoreForm2(){
+      hasForm2 = true; formImgs[2] = removedForm2.img; document.getElementById("f_name2").value = removedForm2.name2 || "";
+      removedForm2 = null; undoKind = null;
+      switchForm(2);
+    }
+    // 迷你選單：開關、點外面或按 Esc 關閉、點選項後關閉
+    (function(){
+      const menuBtn = document.getElementById("avatarMenuBtn"), menuList = document.getElementById("avatarMenuList");
+      function setOpen(on){ menuList.hidden = !on; menuBtn.setAttribute("aria-expanded", on ? "true" : "false"); }
+      menuBtn.addEventListener("click", function(e){ e.stopPropagation(); setOpen(menuList.hidden); });
+      // 用捕獲階段：在選項本身處理之前先收起；看形態 2 時 ✕ 改成「刪掉形態 2」，並擋下原本的「移除圖片」
+      menuList.addEventListener("click", function(e){
+        const btn = e.target.closest("button:not(:disabled)");
+        if(!btn) return;
+        setOpen(false);
+        if(btn.id === "removeAvatarBtn"){
+          if(hasForm2 && editingForm === 2){ e.stopPropagation(); deleteForm2(); }
+          else undoKind = "image";           // 形態 1 的 ✕ = 移除圖片，由原本的處理執行
+        } else if(btn.id === "undoAvatarBtn"){
+          if(undoKind === "form2" && removedForm2 && !hasForm2){ e.stopPropagation(); restoreForm2(); }
+          else undoKind = (removedForm2 && !hasForm2) ? "form2" : null;   // 復原圖片後，若還有被刪的形態 2 可復原就留著「↶」
+        }
+      }, true);
+      // 原本的移除／復原處理（綁在按鈕本身，且會 stopPropagation）跑完後，重新整理選單。
+      // 這兩個監聽要綁在按鈕上、排在原本的處理之後，不能靠冒泡。
+      ["removeAvatarBtn", "undoAvatarBtn"].forEach(function(id){
+        const el = document.getElementById(id);
+        if(el) el.addEventListener("click", function(){ refreshFormUi(); });
+      });
+      const onDoc = function(e){
+        if(!document.getElementById("avatarMenu")){ document.removeEventListener("click", onDoc); document.removeEventListener("keydown", onKey, true); return; }
+        if(!e.target.closest("#avatarMenu")) setOpen(false);
+      };
+      const onKey = function(e){ if(e.key === "Escape" && !menuList.hidden){ setOpen(false); e.stopPropagation(); } };
+      document.addEventListener("click", onDoc);
+      document.addEventListener("keydown", onKey, true);
+    })();
+    refreshFormUi();
+    document.getElementById("amForm1").addEventListener("click", function(){ switchForm(1); });
+    document.getElementById("amForm2").addEventListener("click", function(){ switchForm(2); });
+    document.getElementById("amAdd").addEventListener("click", function(){ if(hasForm2) return; removedForm2 = null; hasForm2 = true; switchForm(2); });
     if(!navPrevStudent && navNextStudent){
       overlay.insertAdjacentHTML("afterbegin", '<button type="button" class="modal-nav-arrow modal-nav-prev modal-nav-placeholder" aria-hidden="true" tabindex="-1" disabled></button>');
     }
@@ -8495,6 +8652,7 @@
         if(el) el.style.display = on ? "none" : "";
       });
       syncNameMoreBtn();
+      refreshFormUi();      // 借用學生沒有形態：隱藏選單裡的「＋」
       const btn = document.getElementById("btnBorrowedToggle");
       if(btn){
         btn.textContent = on ? "已標記為借用學生（點擊取消）" : "標記為借用學生";
@@ -8559,7 +8717,7 @@
       if(!name) return null;
       if(isBorrowedMode){
         return {
-          id: st.id, schoolId: modalSchoolId, name, avatar: currentAvatarData, borrowed: true,
+          id: st.id, schoolId: modalSchoolId, name, avatar: currentForms()[1], borrowed: true,
           level: 1, affinity: 0,
           gearAtk: 0, gearSurv: 0, gearPend: 0, gearBond: 0,
           skillEx: 1, skillN: 1, skillEnh: 0, skillSub: 0,
@@ -8575,8 +8733,13 @@
       const armorVal = document.getElementById("f_armor").getAttribute("data-value") || null;
       const abbrevMeaningEl = document.getElementById("f_abbrevMeaning");
       const finalGroupId = variantGroupId;
+      const forms = currentForms();
+      const keep2 = hasForm2 && !!forms[2];     // 形態 2 沒有圖片就不保留（回到只有形態 1）
+      const name2 = keep2 ? (document.getElementById("f_name2").value.trim() || null) : null;
       return {
-        id: st.id, schoolId: modalSchoolId, name, avatar: currentAvatarData,
+        id: st.id, schoolId: modalSchoolId, name, avatar: forms[1],
+        hasForm2: keep2, avatar2: keep2 ? forms[2] : null, name2: name2,
+        activeForm: (keep2 && editingForm === 2) ? 2 : 1,
         level: val("f_level"), affinity: val("f_affinity"),
         gearAtk: val("f_gearAtk"), gearSurv: val("f_gearSurv"), gearPend: val("f_gearPend"), gearBond: val("f_gearBond"),
         skillEx: val("f_skillEx"), skillN: val("f_skillN"),
@@ -9448,10 +9611,10 @@
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "export-avatar" + (picked ? " sp-picked" : "") + (dim ? " sp-dim" : "");
-        btn.title = st.name;
+        btn.title = studentName(st);
         btn.setAttribute("aria-label", studentFullName(st) + "，" + (picked ? "已選為第 " + (pickIdx + 1) + " 順位" : "未選"));
-        btn.innerHTML = st.avatar
-          ? '<img src="' + st.avatar + '" alt="" draggable="false">'
+        btn.innerHTML = studentAvatar(st)
+          ? '<img src="' + studentAvatar(st) + '" alt="" draggable="false">'
           : '<div class="export-avatar-ph">' + escapeHtml((st.name || "?").slice(0, 1)) + '</div>';
         btn.addEventListener("click", function(){
           if(wrap.dataset.dragMoved === "1"){ wrap.dataset.dragMoved = "0"; return; }
@@ -10314,10 +10477,10 @@
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "export-avatar" + (s.id === activeId ? " active" : "");
-        btn.innerHTML = s.avatar
-          ? '<img src="' + s.avatar + '" alt="" draggable="false">'
+        btn.innerHTML = studentAvatar(s)
+          ? '<img src="' + studentAvatar(s) + '" alt="" draggable="false">'
           : '<div class="export-avatar-ph">' + escapeHtml((s.name||"?").slice(0,1)) + '</div>';
-        btn.title = s.name;
+        btn.title = studentName(s);
         btn.setAttribute("aria-label", studentFullName(s) + (s.id === activeId ? "（目前顯示）" : ""));
         btn.addEventListener("click", function(){
           if(wrap.dataset.dragMoved === "1"){ wrap.dataset.dragMoved = "0"; return; }
@@ -11444,7 +11607,7 @@
       return cache.get(src);
     };
     const bgImg = bg && bg.dataUrl ? await load(bg.dataUrl) : null;
-    const avatarImgs = await Promise.all(list.map(function(st){ return load(st.avatar); }));
+    const avatarImgs = await Promise.all(list.map(function(st){ return load(studentAvatar(st)); }));
     await spLoadFonts();
     if(!isCurrent()) return;
     const titleFont = spFontById(appSettings.skillPrioTitleFont);
@@ -11679,8 +11842,11 @@
   async function buildBackupPayload(avMode){
     const allSchools = await getAllSchools();
     const allStudents = await Promise.all((await getAllStudents()).filter(function(s){ return !s.borrowed; }).map(async function(st){
-      if(!st.avatar || (avMode !== "none" && avMode !== "all")) return st;
-      return Object.assign({}, st, { avatar: await convertAvatarForExport(st.avatar, avMode) });
+      if((!st.avatar && !st.avatar2) || (avMode !== "none" && avMode !== "all")) return st;
+      const out = Object.assign({}, st);
+      if(st.avatar) out.avatar = await convertAvatarForExport(st.avatar, avMode);
+      if(st.avatar2) out.avatar2 = await convertAvatarForExport(st.avatar2, avMode);
+      return out;
     }));
     const payload = {
       type: "ba-roster-backup", version: 3,
