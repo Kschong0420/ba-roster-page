@@ -297,6 +297,20 @@
   .mobile-tabs{ display:none; }
   .sidebar-head{ padding: 14px 16px 8px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
   .sidebar-head .label{ font-size:11px; color:var(--ink-soft); font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+  /* 學校分類排序：沿用學生卡片排序的 sort-btn / filter-panel / sort-rule 樣式 */
+  .school-sort{ margin-left:auto; flex-shrink:0; }
+  .school-sort-btn{
+    width:24px; height:24px; padding:0; display:inline-flex; align-items:center; justify-content:center;
+    border:1px solid transparent; border-radius:7px; background:var(--chip-bg); color:var(--ink); cursor:pointer;
+  }
+  .school-sort-btn:hover{ border-color:var(--hover-border); }
+  .school-sort-btn[aria-expanded="true"]{ color:var(--heading-text); box-shadow:inset 0 0 0 1.5px var(--heading-text); }   /* 只有選單開著才亮 */
+  body.theme-dark .school-sort-btn{ background:#363e52; color:#DCE1EE; }
+  body.theme-dark .school-sort-btn:hover{ background:#434c63; border-color:transparent; }
+  body.theme-dark .school-sort-btn[aria-expanded="true"]{ color:#8FC4F2; box-shadow:inset 0 0 0 1.5px #8FC4F2; }
+  #schoolSortPanel{ width:auto; min-width:0; padding:10px; }
+  #schoolSortPanel .sort-rule{ margin-bottom:0; }
+  #schoolSortPanel .filter-foot{ margin-top:8px; }
   .sort-toggle{ display:flex; gap:4px; align-items:center; }
   .toggle-label{ font-size:11px; font-weight:700; color:var(--ink); margin-right:2px; white-space:nowrap; }
   .sort-btn{
@@ -334,6 +348,8 @@
   .filter-chip{ display:inline-flex; align-items:center; gap:5px; }
   .filter-chip.icon-only{ padding:4px; }
   .filter-chip.icon-only .chip-ico{ width:24px; height:24px; }
+  .filter-chip .fc-school-icon{ width:16px; height:16px; border-radius:5px; object-fit:cover; flex-shrink:0; }
+  body.school-icon-blackbg .filter-chip .fc-school-icon{ background:#000; }
   .filter-chip .chip-ico{
     display:inline-flex; align-items:center; justify-content:center;
     width:18px; height:18px; border-radius:50%; background:rgba(28,37,65,.88); flex-shrink:0;
@@ -1457,6 +1473,11 @@
     <div class="sidebar" id="sidebar">
       <div class="sidebar-head">
         <span class="label" id="sidebarLabel">學校分類</span>
+        <div class="school-sort" id="schoolSort">
+          <button type="button" class="school-sort-btn" id="schoolSortBtn" aria-haspopup="true" aria-expanded="false" title="學校排序">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M4 8h8M6 12h4"/></svg>
+          </button>
+        </div>
       </div>
       <ul class="school-list" id="schoolList"></ul>
       <button class="btn add-school-btn" id="btnAddSchoolSidebar">+ 新增學校</button>
@@ -2069,7 +2090,8 @@
   // recorded meanings (so which one applies is genuinely ambiguous) and
   // they haven't picked a valid one on their profile yet. Prefixes with 0
   // or 1 meaning are never ambiguous, so this is always false for those.
-  function hasUnresolvedAbbrevMeaning(st){
+  // 形態 1 名字前綴的意義還沒選好
+  function hasUnresolvedAbbrevMeaning1(st){
     if(st && st.borrowed) return false;
     const prefix = getVariantPrefix(st.name);
     if(prefix === "O") return false;
@@ -2077,6 +2099,25 @@
     if(meanings.length < 2) return false;
     const chosen = st.abbrevMeaning || "";
     return !chosen || meanings.indexOf(chosen) === -1;
+  }
+  // 形態 2 名字前綴的意義選擇（abbrevMeaning2）。沒選過、且前綴跟形態 1 相同時，沿用形態 1 的選擇。
+  function form2AbbrevChoice(st){
+    const c = st.abbrevMeaning2 || "";
+    if(c) return c;
+    return (st.name2 && getVariantPrefix(st.name2) === getVariantPrefix(st.name)) ? (st.abbrevMeaning || "") : "";
+  }
+  // 形態 2 有自己的名字、前綴有 2 種以上意義，但還沒選好
+  function hasUnresolvedForm2AbbrevMeaning(st){
+    if(!st || st.borrowed || !studentHasForm2(st) || !st.name2) return false;
+    const prefix = getVariantPrefix(st.name2);
+    if(prefix === "O") return false;
+    const meanings = getMeaningsForPrefix(prefix);
+    if(meanings.length < 2) return false;
+    const chosen = form2AbbrevChoice(st);
+    return !chosen || meanings.indexOf(chosen) === -1;
+  }
+  function hasUnresolvedAbbrevMeaning(st){
+    return hasUnresolvedAbbrevMeaning1(st) || hasUnresolvedForm2AbbrevMeaning(st);
   }
 
   // Auto-detects the variant-prefix abbreviation from a student name (via
@@ -2653,7 +2694,7 @@
   // 顯示用的學生資料：名字換成目前形態的名字（其餘欄位不變）
   function studentView(st){
     const nm = studentName(st);
-    return nm === st.name ? st : Object.assign({}, st, { name: nm });
+    return nm === st.name ? st : Object.assign({}, st, { name: nm, abbrevMeaning: form2AbbrevChoice(st) || null });
   }
 
   // 借用學生: only an avatar and a name, no growth data, never shares an
@@ -2715,13 +2756,37 @@
     });
   }
 
+  // 學校排序方式：custom = 自訂順序（可拖曳，存在 school.order）；其餘是依名稱／人數即時排列，不改動自訂順序
+  const SCHOOL_SORT_OPTIONS = [
+    { id: "custom",    label: "自訂順序（可拖曳）" },
+    { id: "az",        label: "A → Z" },
+    { id: "za",        label: "Z → A" },
+    { id: "countDesc", label: "人數 多 → 少" },
+    { id: "countAsc",  label: "人數 少 → 多" }
+  ];
+  let schoolSortMode = "custom";
+  try{
+    const savedSort = localStorage.getItem("ba-roster-school-sort");
+    if(SCHOOL_SORT_OPTIONS.some(function(o){ return o.id === savedSort; })) schoolSortMode = savedSort;
+  }catch(e){}
+
   function orderedSchools(){
-    return [...schools].sort((a,b)=>{
+    const byCustom = function(a,b){
       const ao = a.order != null ? a.order : Infinity;
       const bo = b.order != null ? b.order : Infinity;
       if(ao !== bo) return ao - bo;
       return a.name.localeCompare(b.name, "zh-Hant");
-    });
+    };
+    const byName = function(a,b){ return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }); };
+    const cnt = function(s){ return s.count || 0; };
+    const list = [...schools];
+    switch(schoolSortMode){
+      case "az": return list.sort(function(a,b){ return byName(a,b) || byCustom(a,b); });
+      case "za": return list.sort(function(a,b){ return byName(b,a) || byCustom(a,b); });
+      case "countDesc": return list.sort(function(a,b){ return (cnt(b) - cnt(a)) || byName(a,b) || byCustom(a,b); });
+      case "countAsc": return list.sort(function(a,b){ return (cnt(a) - cnt(b)) || byName(a,b) || byCustom(a,b); });
+      default: return list.sort(byCustom);
+    }
   }
 
   async function persistSchoolOrder(){
@@ -2860,6 +2925,7 @@
 
     li.addEventListener("pointerdown", function(e){
       if(schoolDragActive) return;
+      if(schoolSortMode !== "custom") return;     // 依名稱／人數排序時不能拖曳
       dragMode = false;
       moved = false;
       activePointerId = e.pointerId;
@@ -3018,6 +3084,8 @@
     });
     document.getElementById("sidebarLabel").textContent = tab === "school" ? "學校分類" : "屬性分類";
     document.getElementById("btnAddSchoolSidebar").style.display = tab === "school" ? "" : "none";
+    const sortBox = document.getElementById("schoolSort");
+    if(sortBox) sortBox.style.display = tab === "school" ? "" : "none";
     await renderMain();
   }
 
@@ -3190,7 +3258,7 @@
 
   // 篩選: tick several values per group. Within a group any match counts (OR),
   // across groups all must match (AND). Saved so it survives a reload.
-  const studentFilter = { attr: [], armor: [], star: [] };
+  const studentFilter = { attr: [], armor: [], star: [], school: [] };
   (function loadFilterState(){
     try{
       const saved = JSON.parse(localStorage.getItem("ba-roster-filter") || "null");
@@ -3198,23 +3266,35 @@
       studentFilter.attr = (saved.attr || []).filter(function(id){ return ATTRIBUTES.some(function(a){ return a.id === id; }); });
       studentFilter.armor = (saved.armor || []).filter(function(id){ return ARMORS.some(function(a){ return a.id === id; }); });
       studentFilter.star = (saved.star || []).filter(function(n){ return Number.isInteger(n) && n >= 1 && n <= 9; });
+      studentFilter.school = (saved.school || []).filter(function(id){ return typeof id === "string"; });   // 學校可能已被刪除，用的時候再過濾
     }catch(e){}
   })();
   function saveFilterState(){
     try{ localStorage.setItem("ba-roster-filter", JSON.stringify(studentFilter)); }catch(e){}
   }
   function filterCount(){
-    return (filterIgnoresAttr() ? 0 : studentFilter.attr.length) + studentFilter.armor.length + studentFilter.star.length;
+    return (filterIgnoresAttr() ? 0 : studentFilter.attr.length) + activeSchoolFilter().length + studentFilter.armor.length + studentFilter.star.length;
   }
   function studentFilterActive(){ return filterCount() > 0; }
   // The attribute group is ignored while browsing a single attribute (it would be redundant).
   function filterIgnoresAttr(){ return sidebarTab === "attribute"; }
+  // 只看單一學校時，學校篩選沒有意義（一定都是那間學校），所以先不套用、也不顯示。
+  function filterIgnoresSchool(){
+    return !searchQuery && !(outputMode && deselectMode) && sidebarTab === "school" && !!currentSchoolId && currentSchoolId !== "__ALL__";
+  }
+  // 目前實際生效的學校篩選（已被刪除的學校自動略過）
+  function activeSchoolFilter(){
+    if(filterIgnoresSchool()) return [];
+    return studentFilter.school.filter(function(id){ return schools.some(function(s){ return s.id === id; }); });
+  }
   function applyStudentFilter(list){
     if(!studentFilterActive()) return list;
     const useAttr = !filterIgnoresAttr() && studentFilter.attr.length > 0;
+    const schoolIds = activeSchoolFilter();
     return list.filter(function(s){
       if(s.borrowed) return false;
       if(useAttr && studentFilter.attr.indexOf(s.attribute) === -1) return false;
+      if(schoolIds.length && schoolIds.indexOf(s.schoolId) === -1) return false;
       if(studentFilter.armor.length && studentFilter.armor.indexOf(s.armor) === -1) return false;
       if(studentFilter.star.length && studentFilter.star.indexOf(s.weaponStar || 0) === -1) return false;
       return true;
@@ -3228,6 +3308,7 @@
     btn.title = n ? "篩選（已選 " + n + " 項）" : "篩選";
     btn.setAttribute("aria-label", btn.title);
     btn.classList.toggle("active", n > 0);
+    if(document.getElementById("filterPanel")) renderFilterPanel();
   }
   function showFilteredEmpty(sub, grid, empty, normalVis, filterOnly){
     sub.textContent = "沒有符合篩選條件的學生";
@@ -3240,7 +3321,7 @@
     document.getElementById("btnClearFilterEmpty").addEventListener("click", clearStudentFilter);
   }
   async function clearStudentFilter(){
-    studentFilter.attr = []; studentFilter.armor = []; studentFilter.star = [];
+    studentFilter.attr = []; studentFilter.armor = []; studentFilter.star = []; studentFilter.school = [];
     saveFilterState();
     syncFilterUI();
     if(document.getElementById("filterPanel")) renderFilterPanel();
@@ -3265,14 +3346,19 @@
         const a = ARMORS.find(function(x){ return x.id === id; });
         return a ? '<span class="chip-ico">' + armorShieldSvg(a.color, 13) + '</span>' : "";
       }
+      if(key === "school"){
+        const sc = schools.find(function(x){ return x.id === id; });
+        return (sc && sc.icon) ? '<img class="fc-school-icon" src="' + sc.icon + '" alt="" draggable="false">' : "";
+      }
       return "";
     };
     const group = function(key, title, items){
-      const iconOnly = key !== "star" && appSettings.filterPanelStyle === "simple";
+      const iconKey = key === "attr" || key === "armor";   // 星數、學校一律用文字（學校不一定有圖示）
+      const iconOnly = iconKey && appSettings.filterPanelStyle === "simple";
       return '<div class="filter-title">' + title + '</div><div class="filter-chips">' +
         items.map(function(it){
           const on = studentFilter[key].indexOf(it.value) !== -1;
-          return '<button type="button" class="sort-btn filter-chip' + (on ? " active" : "") + ((key !== "star" && appSettings.filterPanelStyle === "simple") ? " icon-only" : "") + '" data-group="' + key +
+          return '<button type="button" class="sort-btn filter-chip' + (on ? " active" : "") + ((iconKey && appSettings.filterPanelStyle === "simple") ? " icon-only" : "") + '" data-group="' + key +
             '" data-value="' + it.value + '" aria-pressed="' + on + '"' + (iconOnly ? ' title="' + escapeHtml(it.label) + '" aria-label="' + escapeHtml(it.label) + '"' : "") + '>' + iconOf(key, it.value) + (iconOnly ? "" : escapeHtml(it.label)) + '</button>';
         }).join("") + '</div>';
     };
@@ -3282,6 +3368,7 @@
       (filterIgnoresAttr() ? "" : group("attr", "屬性", ATTRIBUTES.map(function(a){ return { value: a.id, label: a.name }; }))) +
       group("armor", "裝甲", ARMORS.map(function(a){ return { value: a.id, label: a.name }; })) +
       group("star", "星數", stars) +
+      ((filterIgnoresSchool() || !schools.length) ? "" : group("school", "學校", orderedSchools().map(function(s){ return { value: s.id, label: s.name }; }))) +
       '<div class="filter-foot"><span class="filter-hint">' + (studentFilterActive() ? "借用學生不會顯示" : "") + '</span>' +
       '<button type="button" class="btn btn-ghost btn-sm" id="filterClearBtn"' + (studentFilterActive() ? "" : " disabled") + '>清除全部</button></div>';
     p.querySelectorAll(".filter-chip").forEach(function(chip){
@@ -7706,25 +7793,32 @@
     const sessionCreatedGroups = [];
     let rawMatches = st.name ? await findRawVariantMatches(st.name, st.id) : [];
     let abbrevMeaningSelection = st.abbrevMeaning || "";
+    let abbrevMeaningSelection2 = st.name2 ? form2AbbrevChoice(st) : "";   // 形態 2 的簡寫意義
 
     // If the student's name prefix (e.g. "M" from "M.Hanako") maps to an
     // abbreviation with 2+ meanings (comma-separated in the abbrev list,
     // e.g. "Maid,Magical"), show a select so the user can pick which one
     // this particular character is. With 0 or 1 meaning there's nothing to
     // choose between, so the field is hidden entirely.
-    function abbrevMeaningBoxHtml(name){
-      const prefix = getVariantPrefix(name);
-      if(prefix === "O") return "";
-      const meanings = getMeaningsForPrefix(prefix);
-      if(meanings.length < 2) return "";
-      return '<div class="fieldset-title">簡寫意義</div>' +
-        '<div class="field"><label for="f_abbrevMeaning">「' + escapeHtml(prefix) + '」代表的意義</label>' +
-        '<select id="f_abbrevMeaning">' +
-          '<option value="">請選擇...</option>' +
-          meanings.map(function(m){
-            return '<option value="' + escapeHtml(m) + '"' + (m === abbrevMeaningSelection ? ' selected' : '') + '>' + escapeHtml(m) + '</option>';
-          }).join("") +
-        '</select></div>';
+    // name2：形態 2 自己的名字（形態 2 沒填名字就沿用形態 1，不需要另外選）。
+    function abbrevMeaningBoxHtml(name, name2){
+      function one(nm, id, selected, tag){
+        if(!nm) return "";
+        const prefix = getVariantPrefix(nm);
+        if(prefix === "O") return "";
+        const meanings = getMeaningsForPrefix(prefix);
+        if(meanings.length < 2) return "";
+        return '<div class="field"><label for="' + id + '">「' + escapeHtml(prefix) + '」代表的意義' + tag + '</label>' +
+          '<select id="' + id + '">' +
+            '<option value="">請選擇...</option>' +
+            meanings.map(function(m){
+              return '<option value="' + escapeHtml(m) + '"' + (m === selected ? ' selected' : '') + '>' + escapeHtml(m) + '</option>';
+            }).join("") +
+          '</select></div>';
+      }
+      const html2 = (hasForm2 && name2) ? one(name2, "f_abbrevMeaning2", abbrevMeaningSelection2, "（形態 2）") : "";
+      const html1 = one(name, "f_abbrevMeaning", abbrevMeaningSelection, html2 ? "（形態 1）" : "");
+      return (html1 || html2) ? '<div class="fieldset-title">簡寫意義</div>' + html1 + html2 : "";
     }
 
     // Siblings (other same-base-name students already saved) that share
@@ -7866,7 +7960,7 @@
     // meaning choice).
     // Kept live by syncGroupAbbrevTab() below since typing a new name can
     // add or remove that content.
-    const groupAbbrevHasContentInit = rawMatches.length > 0 || !!abbrevMeaningBoxHtml(st.name);
+    const groupAbbrevHasContentInit = rawMatches.length > 0 || !!abbrevMeaningBoxHtml(st.name, st.name2);
     // 通用設定: how the 同組角色版本 · 好感度參考 info is opened.
     const nameMoreHiddenSetting = !!appSettings.nameMoreHidden;
     // 分組按鈕被隱藏時，顯示方式一律鎖定為頁面
@@ -7965,8 +8059,8 @@
             '<div class="empty empty-inline" id="groupAbbrevEmptyNote"' + (groupAbbrevHasContentInit ? ' style="display:none"' : '') + '>' +
               '<h3>目前沒有分組</h3><p>出現同名版本後即可在此設定。</p>' +
             '</div>' +
-            '<div class="modal-section' + (abbrevMeaningBoxHtml(st.name) ? " has-abbrev-meaning" : "") + '" id="abbrevMeaningSection">' +
-              '<div id="abbrevMeaningContainer">' + abbrevMeaningBoxHtml(st.name) + '</div>' +
+            '<div class="modal-section' + (abbrevMeaningBoxHtml(st.name, st.name2) ? " has-abbrev-meaning" : "") + '" id="abbrevMeaningSection">' +
+              '<div id="abbrevMeaningContainer">' + abbrevMeaningBoxHtml(st.name, st.name2) + '</div>' +
             '</div>' +
             '<div class="modal-section" id="variantSection">' +
               '<div id="variantBoxContainer">' + variantBoxHtml() + '</div>' +
@@ -8059,7 +8153,8 @@
       const tabBtn = document.getElementById("groupAbbrevTab");
       const nameEl = document.getElementById("f_name");
       if(!tabBtn || !nameEl) return;
-      const hasContent = rawMatches.length > 0 || !!abbrevMeaningBoxHtml(nameEl.value.trim());
+      const nameEl2 = document.getElementById("f_name2");
+      const hasContent = rawMatches.length > 0 || !!abbrevMeaningBoxHtml(nameEl.value.trim(), nameEl2 ? nameEl2.value.trim() : "");
       tabBtn.style.display = hasContent ? "" : "none";
       syncNameMoreBtn();
       const emptyNote = document.getElementById("groupAbbrevEmptyNote");
@@ -8145,7 +8240,8 @@
       const container = document.getElementById("abbrevMeaningContainer");
       if(!container) return;
       const nameNow = document.getElementById("f_name").value.trim();
-      const html = abbrevMeaningBoxHtml(nameNow);
+      const name2El = document.getElementById("f_name2");
+      const html = abbrevMeaningBoxHtml(nameNow, name2El ? name2El.value.trim() : "");
       container.innerHTML = html;
       const section = document.getElementById("abbrevMeaningSection");
       if(section) section.classList.toggle("has-abbrev-meaning", !!html);
@@ -8154,6 +8250,12 @@
         sel.addEventListener("change", function(){ abbrevMeaningSelection = this.value; });
       } else {
         abbrevMeaningSelection = "";
+      }
+      const sel2 = document.getElementById("f_abbrevMeaning2");
+      if(sel2){
+        sel2.addEventListener("change", function(){ abbrevMeaningSelection2 = this.value; });
+      } else {
+        abbrevMeaningSelection2 = "";
       }
       syncGroupAbbrevTab();
     }
@@ -8193,6 +8295,7 @@
       // ↶：最近一次動作可以復原時才出現
       const undo = document.getElementById("undoAvatarBtn"), top = topUndo();
       if(undo) undo.style.display = (top && top.type !== "image") || avatarCtl.canUndo() ? "" : "none";
+      renderAbbrevMeaningBox();     // 形態有增減／對調時，簡寫意義的選單跟著更新
     }
     function fireChange(){ document.getElementById("avatarUpload").dispatchEvent(new Event("change", { bubbles: true })); }   // 讓自動儲存與「有沒有改過」跟上
     function switchForm(n){
@@ -8204,25 +8307,29 @@
     }
     function deleteForm2(){
       const img = currentAvatarData, nm = document.getElementById("f_name2").value.trim();   // 正在看形態 2，所以目前的圖片就是形態 2 的
-      if(img || nm) undoStack.push({ type: "form2", data: { img: img || null, name2: nm } }); // 還沒填任何東西的形態 2，沒什麼好復原的
+      if(img || nm) undoStack.push({ type: "form2", data: { img: img || null, name2: nm, m2: abbrevMeaningSelection2 } }); // 還沒填任何東西的形態 2，沒什麼好復原的
+      abbrevMeaningSelection2 = "";
       hasForm2 = false; formImgs[2] = null; document.getElementById("f_name2").value = "";
       editingForm = 1; currentAvatarData = formImgs[1] || null;
       resetAvatarUi(); refreshFormUi(); fireChange();
     }
     function restoreForm2(d){
+      abbrevMeaningSelection2 = d.m2 || "";
       hasForm2 = true; formImgs[2] = d.img; document.getElementById("f_name2").value = d.name2 || "";
       switchForm(2);
     }
     // 刪掉形態 1：形態 2 的圖片與名字變成形態 1（形態 2 沒填名字就保留原本的名字）
     function promoteForm2(){
       const nm = document.getElementById("f_name"), nm2 = document.getElementById("f_name2");
-      undoStack.push({ type: "promote", data: { img1: currentAvatarData, name1: nm.value, img2: formImgs[2], name2: nm2.value } });
+      undoStack.push({ type: "promote", data: { img1: currentAvatarData, name1: nm.value, img2: formImgs[2], name2: nm2.value, m1: abbrevMeaningSelection, m2: abbrevMeaningSelection2 } });
       currentAvatarData = formImgs[2] || null;
-      if(nm2.value.trim()) nm.value = nm2.value.trim();
+      if(nm2.value.trim()){ nm.value = nm2.value.trim(); abbrevMeaningSelection = abbrevMeaningSelection2; }
+      abbrevMeaningSelection2 = "";
       hasForm2 = false; formImgs[2] = null; nm2.value = ""; editingForm = 1;
       resetAvatarUi(); refreshFormUi(); fireChange();
     }
     function restorePromote(d){
+      abbrevMeaningSelection = d.m1 || ""; abbrevMeaningSelection2 = d.m2 || "";
       hasForm2 = true; formImgs[2] = d.img2;
       document.getElementById("f_name").value = d.name1; document.getElementById("f_name2").value = d.name2;
       currentAvatarData = d.img1; editingForm = 1;
@@ -8747,6 +8854,7 @@
       }, 150);
     }
 
+    document.getElementById("f_name2").addEventListener("change", scheduleVariantBoxRender);
     document.getElementById("f_name").focus();
     document.getElementById("f_name").addEventListener("change", async function(){
       const nameNow = this.value.trim();
@@ -8774,7 +8882,7 @@
           skillEx: 1, skillN: 1, skillEnh: 0, skillSub: 0,
           weaponStar: 1, weaponLevel: 0,
           release1: 0, release2: 0, release3: 0,
-          variantGroupId: null, attribute: null, armor: null, abbrevMeaning: null
+          variantGroupId: null, attribute: null, armor: null, abbrevMeaning: null, abbrevMeaning2: null
         };
       }
       const val = function(id){ return parseInt(document.getElementById(id).value, 10) || 0; };
@@ -8783,6 +8891,7 @@
       const attrVal = document.getElementById("f_attribute").getAttribute("data-value") || null;
       const armorVal = document.getElementById("f_armor").getAttribute("data-value") || null;
       const abbrevMeaningEl = document.getElementById("f_abbrevMeaning");
+      const abbrevMeaningEl2 = document.getElementById("f_abbrevMeaning2");
       const finalGroupId = variantGroupId;
       const forms = currentForms();
       const keep2 = hasForm2 && !!forms[2];     // 形態 2 沒有圖片就不保留（回到只有形態 1）
@@ -8799,7 +8908,8 @@
         weaponStar: starVal, weaponLevel: val("f_weaponLevel"),
         release1: val("f_release1"), release2: val("f_release2"), release3: val("f_release3"),
         variantGroupId: finalGroupId || null, attribute: attrVal, armor: armorVal,
-        abbrevMeaning: abbrevMeaningEl ? (abbrevMeaningEl.value || null) : null
+        abbrevMeaning: abbrevMeaningEl ? (abbrevMeaningEl.value || null) : null,
+        abbrevMeaning2: (keep2 && name2 && abbrevMeaningEl2) ? (abbrevMeaningEl2.value || null) : null
       };
     }
 
@@ -9070,7 +9180,7 @@
 
   function buildListLineText(st, allStudents){
     if(isBorrowed(st)) return st.name + " " + BORROWED_NO_GROWTH_TEXT;
-    const parts = [st.name, "LV" + (st.level||0)];
+    const parts = [studentName(st), "LV" + (st.level||0)];   // 名字跟著目前選的形態
     if(st.weaponStar >= 6){
       const xx = computeWeaponLevelMax(st.weaponStar);
       const yy = String(st.weaponLevel || 0).padStart(2, "0");
@@ -9134,13 +9244,35 @@
         if(meanings.length === 1){
           chosen = meanings[0];
         } else {
-          if(hasUnresolvedAbbrevMeaning(member)){
+          if(hasUnresolvedAbbrevMeaning1(member)){
             return { needsChoice: true, student: member, prefix: prefix };
           }
           chosen = member.abbrevMeaning;
         }
         if(!usedMeanings[prefix]) usedMeanings[prefix] = new Set();
         usedMeanings[prefix].add(chosen);
+      }
+      // 目前選的是形態 2 且名字不同時，名字裡的前綴也要列出（輸出的名字會顯示它）。
+      // 意義用形態 2 自己選的那個；有 2 種以上意義卻還沒選，就跟形態 1 一樣請使用者去選。
+      if(!isBorrowed(st)){
+        const v = studentView(st);
+        if(v.name !== st.name){
+          const prefix2 = getVariantPrefix(v.name);
+          if(prefix2 !== "O"){
+            const meanings2 = getMeaningsForPrefix(prefix2);
+            let chosen2 = null;
+            if(meanings2.length === 1){
+              chosen2 = meanings2[0];
+            } else if(meanings2.length >= 2){
+              if(hasUnresolvedForm2AbbrevMeaning(st)) return { needsChoice: true, student: st, prefix: prefix2 };
+              chosen2 = form2AbbrevChoice(st);
+            }
+            if(chosen2){
+              if(!usedMeanings[prefix2]) usedMeanings[prefix2] = new Set();
+              usedMeanings[prefix2].add(chosen2);
+            }
+          }
+        }
       }
     }
 
@@ -10536,7 +10668,7 @@
       if(viewMode === "abbrev"){
         const result = buildAbbrevListResult(selected, allStudents);
         if(result.needsChoice){
-          showToast('「' + result.student.name + '」的簡寫「' + result.prefix + '」有多個意義，請選擇代表意義');
+          showToast('「' + studentName(result.student) + '」的簡寫「' + result.prefix + '」有多個意義，請選擇代表意義');
           openStudentModal(result.student);
           return;
         }
@@ -10835,7 +10967,8 @@
     return [n - second, second];
   }
 
-  function spDisplayName(st){
+  function spDisplayName(st0){
+    const st = studentView(st0);   // 名字跟著目前選的形態（形態 2 沒填名字就沿用形態 1）
     if(appSettings.skillPrioNameStyle === "full"){
       const parts = buildFullNameParts(st);
       return parts.meaning ? parts.base + " (" + parts.meaning + ")" : st.name;
@@ -12625,6 +12758,111 @@
   syncCardDisplayUI();
 
   document.getElementById("btnAddSchoolSidebar").addEventListener("click", openAddSchoolModal);
+
+  // ---- 學校分類排序按鈕（介面沿用學生卡片的排序面板） ----
+  (function(){
+    const btn = document.getElementById("schoolSortBtn");
+    if(!btn) return;
+    let sortDir = "asc";   // asc：A→Z／少→多　desc：Z→A／多→少
+    function keyOf(mode){ return (mode === "az" || mode === "za") ? "name" : (mode === "custom" ? "custom" : "count"); }
+    function modeFor(key, dir){
+      if(key === "name") return dir === "asc" ? "az" : "za";
+      return dir === "asc" ? "countAsc" : "countDesc";
+    }
+    function syncBtn(){
+      const cur = SCHOOL_SORT_OPTIONS.find(function(o){ return o.id === schoolSortMode; }) || SCHOOL_SORT_OPTIONS[0];
+      btn.title = "學校排序：" + cur.label;
+      btn.setAttribute("aria-label", "學校排序，目前：" + cur.label);
+    }
+    function closePanel(){
+      const p = document.getElementById("schoolSortPanel");
+      if(p) p.remove();
+      btn.setAttribute("aria-expanded", "false");
+    }
+    function position(){
+      const p = document.getElementById("schoolSortPanel");
+      if(!p) return;
+      const r = btn.getBoundingClientRect();
+      const w = p.offsetWidth;
+      p.style.top = Math.min(r.bottom + 6, window.innerHeight - 80) + "px";
+      p.style.left = Math.max(12, Math.min(r.right - w, window.innerWidth - w - 12)) + "px";   // 右緣對齊按鈕
+    }
+    function setMode(mode){
+      schoolSortMode = mode;
+      try{ localStorage.setItem("ba-roster-school-sort", mode); }catch(e){}
+      syncBtn();
+      renderPanel();
+      renderSchoolList();
+    }
+    // 把目前看到的順序存成自訂順序
+    async function commitAsCustom(){
+      const list = orderedSchools();
+      for(let i = 0; i < list.length; i++){
+        if(list[i].order !== i){
+          list[i].order = i;
+          try{ await putSchool(list[i]); }catch(e){ /* ignore */ }
+        }
+      }
+      setMode("custom");
+    }
+    function renderPanel(){
+      const p = document.getElementById("schoolSortPanel");
+      if(!p) return;
+      const key = keyOf(schoolSortMode);
+      if(key !== "custom") sortDir = (schoolSortMode === "za" || schoolSortMode === "countDesc") ? "desc" : "asc";
+      p.innerHTML =
+        '<div class="sort-rule">' +
+          '<select class="view-select" id="schoolSortKey" aria-label="學校排序依據">' +
+            [["custom", "自訂順序"], ["name", "名稱"], ["count", "人數"]].map(function(o){
+              return '<option value="' + o[0] + '"' + (o[0] === key ? " selected" : "") + '>' + o[1] + '</option>';
+            }).join("") +
+          '</select>' +
+          '<button type="button" class="sort-btn" id="schoolSortDir" title="切換升序／降序"' + (key === "custom" ? " disabled" : "") + '>' +
+            (sortDir === "asc" ? "↑ 升序" : "↓ 降序") + '</button>' +
+        '</div>' +
+        '<div class="filter-foot">' +
+          (key === "custom"
+            ? '<span class="filter-hint">拖曳學校可調整順序</span>'
+            : '<button type="button" class="btn btn-ghost btn-sm" id="schoolSortKeep">存為自訂順序</button>') +
+        '</div>';
+      p.querySelector("#schoolSortKey").addEventListener("change", function(){
+        const v = this.value;
+        if(v === "custom") return setMode("custom");
+        if(key === "custom") sortDir = v === "count" ? "desc" : "asc";   // 從自訂切過來：名稱預設 A→Z、人數預設多→少
+        setMode(modeFor(v, sortDir));
+      });
+      p.querySelector("#schoolSortDir").addEventListener("click", function(){
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+        setMode(modeFor(key, sortDir));
+      });
+      const keep = p.querySelector("#schoolSortKeep");
+      if(keep) keep.addEventListener("click", function(){ commitAsCustom(); });
+      position();
+    }
+    function openPanel(){
+      closeFilterPanel(); closeSortPanel(); closeBadgePanel();
+      const p = document.createElement("div");
+      p.id = "schoolSortPanel";
+      p.className = "filter-panel";
+      document.body.appendChild(p);
+      renderPanel();
+      btn.setAttribute("aria-expanded", "true");
+    }
+    btn.addEventListener("click", function(){
+      if(document.getElementById("schoolSortPanel")) closePanel(); else openPanel();
+    });
+    document.addEventListener("click", function(e){
+      const p = document.getElementById("schoolSortPanel");
+      if(!p) return;
+      const path = e.composedPath ? e.composedPath() : [];
+      // 按鈕點下去後面板會重畫，e.target 已不在 DOM 裡，所以要用事件原本的路徑判斷是不是點在面板內
+      if(path.indexOf(p) !== -1 || path.indexOf(btn) !== -1 || p.contains(e.target) || btn.contains(e.target)) return;
+      closePanel();
+    });
+    document.addEventListener("keydown", function(e){ if(e.key === "Escape") closePanel(); });
+    window.addEventListener("resize", closePanel);
+    syncBtn();
+  })();
   document.getElementById("btnEditSchool").addEventListener("click", openEditSchoolModal);
   document.getElementById("btnAddStudent").addEventListener("click", function(){ openStudentModal(null); });
   document.getElementById("btnExport").addEventListener("click", exportBackup);
