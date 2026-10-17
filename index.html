@@ -749,6 +749,48 @@
   .settings-search-wrap{ display:flex; align-items:center; gap:6px; margin-top:12px; }
   /* 搜尋按鈕放在標題列右側，分頁列就不會因為多一個按鈕而換行 */
   .settings-head{ position:relative; }
+  /* ===== 通用設定：磁貼首頁 + 單張詳細卡片 ===== */
+  #settingsTabs{ display:none; }
+  .settings-head .settings-back{ position:absolute; left:0; top:calc(50% - 7px); transform:translateY(-50%); margin:0; padding:5px 10px; display:none; align-items:center; gap:4px; }
+  .modal.st-detail .settings-head .settings-back{ display:inline-flex; }
+  .settings-home{ display:flex; flex-direction:column; gap:12px; }
+  .modal.st-detail .settings-home{ display:none; }
+  .st-sec{ margin:2px 2px -4px; font-size:11.5px; font-weight:800; letter-spacing:.08em; color:var(--ink-soft); }
+  .st-quick{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; }
+  .st-grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
+  .st-qtile, .st-tile{
+    display:flex; flex-direction:column; align-items:flex-start; min-width:0; text-align:left; font:inherit; cursor:pointer;
+    border:1px solid var(--border); border-radius:12px; background:var(--panel); color:var(--ink);
+  }
+  .st-qtile:hover, .st-tile:hover{ background:var(--hover-bg); border-color:var(--hover-border); }
+  .st-qtile{ gap:5px; padding:10px 11px; }
+  .st-qtile.on{ background:var(--active-tint-bg); border-color:var(--active-tint-border); color:var(--heading-text); }
+  .st-qtile .q-name{ font-size:11.5px; font-weight:700; color:var(--ink-soft); }
+  .st-qtile.on .q-name{ color:inherit; }
+  .st-qtile .q-val{ font-size:13px; font-weight:800; white-space:nowrap; }
+  .st-tile{ gap:5px; padding:12px; min-height:88px; }
+  .st-tile .t-name{ font-size:14px; font-weight:800; }
+  .st-tile .t-sub{ max-width:100%; font-size:11.5px; line-height:1.35; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .st-qtile svg, .st-tile svg{ width:18px; height:18px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .st-tile svg{ color:var(--accent); margin-bottom:2px; }
+  body.theme-dark .st-tile svg{ color:#8FC4F2; }
+  .st-qtile:focus-visible, .st-tile:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  /* 動畫頁：各項動畫兩欄排列，整頁不用滑 */
+  .motion-grid{ display:grid; grid-template-columns:1fr 1fr; column-gap:22px; }
+  @media (max-width:480px){ .motion-grid{ column-gap:14px; } .st-tile{ padding:10px; min-height:80px; } }
+  /* 螢幕較矮時把首頁收緊，讓首頁一屏放得下、不用滑 */
+  @media (max-height:780px){
+    .settings-home{ gap:8px; }
+    .st-tile{ min-height:70px; padding:9px 10px; gap:3px; }
+    .st-qtile{ padding:8px 10px; gap:3px; }
+    .modal .settings-home .storage-usage-box{ padding:8px 12px; }
+  }
+  @media (max-height:700px){
+    .st-tile{ min-height:60px; padding:7px 10px; }
+    .st-tile svg{ margin-bottom:0; }
+    .st-qtile{ padding:6px 10px; }
+    .settings-home{ gap:6px; }
+  }
   .settings-head .settings-search-btn{ position:absolute; right:0; top:calc(50% - 7px); transform:translateY(-50%); margin:0; padding:5px 10px; }
   .settings-search{
     flex:1; min-width:0; margin-top:0; padding:7px 10px; font-size:13px; border-radius:8px;
@@ -5932,6 +5974,7 @@
 
     showModal(
       '<div class="settings-head">' +
+        '<button type="button" class="btn btn-sm settings-back" id="settingsBack" aria-label="返回設定首頁">‹ 返回</button>' +
         '<h3>通用設定</h3>' +
         '<button type="button" class="btn btn-sm settings-search-btn" id="settingsSearchBtn" title="搜尋設定" aria-label="搜尋設定" aria-expanded="false">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>' +
@@ -5942,17 +5985,45 @@
         '<button type="button" class="btn btn-ghost btn-sm" id="settingsSearchClose" aria-label="關閉搜尋" title="關閉搜尋">✕</button>' +
       '</div>' +
       '<div class="settings-search-results" id="settingsSearchResults" style="display:none"></div>' +
-      '<div class="settings-tabs">' +
-        '<button type="button" class="btn btn-sm settings-tab active" data-page="general">一般設定</button>' +
+      '<div class="settings-tabs" id="settingsTabs">' +
         '<button type="button" class="btn btn-sm settings-tab" data-page="appearance">外觀</button>' +
-        '<button type="button" class="btn btn-sm settings-tab" data-page="motion">動畫效果</button>' +
-        '<button type="button" class="btn btn-sm settings-tab" data-page="image">圖片 / 卡片</button>' +
-        '<button type="button" class="btn btn-sm settings-tab" data-page="output">輸出模式</button>' +
-        '<button type="button" class="btn btn-sm settings-tab" data-page="advanced">進階與儲存</button>' +
+        '<button type="button" class="btn btn-sm settings-tab" data-page="motion">動畫</button>' +
+        '<button type="button" class="btn btn-sm settings-tab" data-page="image">背景與卡片</button>' +
+        '<button type="button" class="btn btn-sm settings-tab" data-page="limits">數值上限</button>' +
+        '<button type="button" class="btn btn-sm settings-tab" data-page="search">搜尋</button>' +
+        '<button type="button" class="btn btn-sm settings-tab" data-page="output">輸出</button>' +
+        '<button type="button" class="btn btn-sm settings-tab" data-page="sync">雲端同步</button>' +
+        '<button type="button" class="btn btn-sm settings-tab" data-page="backup">備份與匯出</button>' +
+        '<button type="button" class="btn btn-sm settings-tab" data-page="webp">圖片格式</button>' +
       '</div>' +
       '<div class="settings-modal-body">' +
-        '<div class="settings-page" data-page="general">' +
-          '<div class="fieldset-title">數值上限設定</div>' +
+        '<div class="settings-home" id="settingsHome">' +
+          '<div class="st-sec">快速切換</div>' +
+          '<div class="st-quick">' +
+          '<button type="button" class="st-qtile" id="q_theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14A8 8 0 1110 4a6.5 6.5 0 0010 10z"/></svg><span class="q-name">深淺</span><span class="q-val"></span></button>' +
+          '<button type="button" class="st-qtile" id="q_eye"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="q-name">護眼</span><span class="q-val"></span></button>' +
+          '<button type="button" class="st-qtile" id="q_motion"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h3l2-6 4 12 2-6h3"/></svg><span class="q-name">動畫</span><span class="q-val"></span></button>' +
+          '<button type="button" class="st-qtile" id="q_density"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="q-name">密度</span><span class="q-val"></span></button>' +
+          '</div>' +
+          '<div class="st-sec">更多設定</div>' +
+          '<div class="st-grid">' +
+          '<button type="button" class="st-tile" data-page="appearance"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg><span class="t-name">外觀</span><span class="t-sub" id="tileSub_appearance"></span></button>' +
+          '<button type="button" class="st-tile" data-page="motion"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-8 5-8 7 0s4 8 7 0 3-4 4-2"/></svg><span class="t-name">動畫</span><span class="t-sub" id="tileSub_motion"></span></button>' +
+          '<button type="button" class="st-tile" data-page="image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.5"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg><span class="t-name">背景與卡片</span><span class="t-sub" id="tileSub_image"></span></button>' +
+          '<button type="button" class="st-tile" data-page="limits"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span class="t-name">數值上限</span><span class="t-sub" id="tileSub_limits"></span></button>' +
+          '<button type="button" class="st-tile" data-page="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="t-name">搜尋</span><span class="t-sub" id="tileSub_search"></span></button>' +
+          '<button type="button" class="st-tile" data-page="output"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M8 8l4-4 4 4"/><path d="M5 15v4h14v-4"/></svg><span class="t-name">輸出</span><span class="t-sub" id="tileSub_output"></span></button>' +
+          '<button type="button" class="st-tile" data-page="sync"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4 4 0 010-8 5 5 0 019.5-1A4.5 4.5 0 0117 18z"/></svg><span class="t-name">雲端同步</span><span class="t-sub" id="tileSub_sync"></span></button>' +
+          '<button type="button" class="st-tile" data-page="backup"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 002 2h10a2 2 0 002-2V9M10 13h4"/></svg><span class="t-name">備份與匯出</span><span class="t-sub" id="tileSub_backup"></span></button>' +
+          '<button type="button" class="st-tile" data-page="webp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="t-name">圖片格式</span><span class="t-sub" id="tileSub_webp"></span></button>' +
+          '</div>' +
+          '<div class="st-sec">儲存空間</div>' +
+          '<div class="storage-usage-box" id="storageUsageBox">' +
+            '<div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width:0%;"></div></div>' +
+            '<div class="storage-usage-text" id="storageUsageText">計算中...</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="settings-page" data-page="limits" style="display:none">' +
           '<div class="settings-num-grid">' +
             '<div class="field"><label for="st_levelMax">等級上限</label><input type="number" id="st_levelMax" min="1" value="' + draft.levelMax + '"></div>' +
             '<div class="field"><label for="st_gearMax">裝備等級上限</label><input type="number" id="st_gearMax" min="1" value="' + draft.gearMax + '"></div>' +
@@ -5960,6 +6031,8 @@
             '<div class="field"><label for="st_skillExMax">EX技能上限</label><input type="number" id="st_skillExMax" min="1" value="' + draft.skillExMax + '"></div>' +
             '<div class="field"><label for="st_releaseMax">特性解放上限</label><input type="number" id="st_releaseMax" min="0" value="' + draft.releaseMax + '"></div>' +
           '</div>' +
+        '</div>' +
+        '<div class="settings-page" data-page="search" style="display:none">' +
           '<div class="fieldset-title">搜尋行為</div>' +
           '<div class="theme-toggle-row">' +
             '<button type="button" class="btn btn-sm theme-opt' + (draft.autoClearSearchOnOpen ? " active" : "") + '" id="st_autoClearOn">開啟後自動清空</button>' +
@@ -6045,6 +6118,7 @@
           '<div id="st_motionSubs">' +
             '<div class="fieldset-title">各項動畫</div>' +
             '<div class="variant-group-note" style="margin-top:-6px;">可以逐項開關。上面選「減少動畫」時，這些全部停用；改動在按下儲存後生效。</div>' +
+            '<div class="motion-grid">' +
             MOTION_ITEMS.map(function(it){
               return '<div class="field"><label>' + it.label + '</label>' +
                 '<div class="theme-toggle-row">' +
@@ -6053,6 +6127,7 @@
                 '</div></div>' +
                 '<div class="variant-group-note" style="margin-top:-6px;">' + it.desc + '</div>';
             }).join("") +
+            '</div>' +
           '</div>' +
         '</div>' +
         '<div class="settings-page" data-page="image" style="display:none">' +
@@ -6062,10 +6137,7 @@
         '<div class="settings-page" data-page="output" style="display:none">' +
           spOutputSettingsHtml(draft, "st_") +
         '</div>' +
-        '<div class="settings-page" data-page="advanced" style="display:none">' +
-          '<details class="settings-fold" data-fold="sync"' + (advFoldOpen("sync", true) ? " open" : "") + '>' +
-            '<summary><span class="fold-title">雲端同步（GitHub）</span><span class="fold-hint">推送／拉取資料</span></summary>' +
-            '<div class="settings-fold-body">' +
+        '<div class="settings-page" data-page="sync" style="display:none">' +
           '<div style="font-size:12.5px; color:var(--ink-soft); margin:0 0 10px;">整份覆蓋：開始前先拉取，改完再推送。按鈕立即生效；token 只存在這台裝置。</div>' +
           '<form id="syncLoginForm" autocomplete="on" novalidate>' +
             '<div class="field"><label for="st_syncRepo">repo（帳號/名稱）</label><input type="text" id="st_syncRepo" name="username" placeholder="myname/ba-roster-data" autocomplete="username" autocapitalize="off" spellcheck="false"></div>' +
@@ -6096,11 +6168,8 @@
             '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkAlways">永遠下載</button>' +
           '</div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">決定拉取（會取代這台資料）前要不要先下載本機備份。「僅學生資料不同」：差異只在學生編輯視窗的內容時不下載；學校、簡寫清單、群組有差異，或學生人數不同仍會下載。</div>' +
-            '</div>' +
-          '</details>' +
-          '<details class="settings-fold" data-fold="backup"' + (advFoldOpen("backup", false) ? " open" : "") + '>' +
-            '<summary><span class="fold-title">備份與匯出</span><span class="fold-hint">備份格式、設定備份、除錯資料</span></summary>' +
-            '<div class="settings-fold-body">' +
+        '</div>' +
+        '<div class="settings-page" data-page="backup" style="display:none">' +
           '<div class="fieldset-title">匯出備份格式</div>' +
           '<div class="field">' +
             '<div class="theme-toggle-row">' +
@@ -6119,11 +6188,8 @@
           '<div class="fieldset-title">除錯資料</div>' +
           '<div class="field"><button type="button" class="btn btn-sm" id="btnExportDiag">匯出除錯資料</button></div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">遇到問題要回報時使用：匯出瀏覽器資訊、設定、資料庫內容和最近的錯誤記錄。不含任何圖片（卡片圖片、圖示、背景只記大小），檔案是可直接開啟的 JSON。</div>' +
-            '</div>' +
-          '</details>' +
-          '<details class="settings-fold" data-fold="card"' + (advFoldOpen("card", false) ? " open" : "") + '>' +
-            '<summary><span class="fold-title">卡片圖片格式</span><span class="fold-hint">WebP 轉換</span></summary>' +
-            '<div class="settings-fold-body">' +
+        '</div>' +
+        '<div class="settings-page" data-page="webp" style="display:none">' +
           '<div class="fieldset-title">卡片圖片上傳時轉成 <span style="text-transform:none">WebP</span></div>' +
           '<div class="theme-toggle-row">' +
             '<button type="button" class="btn btn-sm theme-opt' + (draft.avatarUploadWebp === false ? " active" : "") + '" id="st_avUpWebpOff">關閉</button>' +
@@ -6141,13 +6207,6 @@
           '<div class="field"><button type="button" class="btn btn-sm" id="btnAvatarToWebp">開始轉換</button></div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">把已存的 PNG／JPEG 轉成 WebP 以省空間（保留透明，無法還原）。立即生效，不需按「儲存」。</div>' +
           '<div id="avatarToWebpStatus" style="display:none; font-size:12.5px; color:var(--ink-soft); margin:-4px 0 12px;"></div>' +
-            '</div>' +
-          '</details>' +
-          '<div class="fieldset-title">儲存空間</div>' +
-          '<div class="storage-usage-box" id="storageUsageBox">' +
-            '<div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width:0%;"></div></div>' +
-            '<div class="storage-usage-text" id="storageUsageText">計算中...</div>' +
-          '</div>' +
         '</div>' +
       '</div>' +
       '<div class="modal-actions" style="justify-content:flex-end"><button class="btn btn-ghost" id="btnSettingsClose">關閉</button>' +
@@ -6160,17 +6219,80 @@
     // .settings-page is shown — every field still exists in the DOM the
     // whole time (just hidden), so all the handlers wired up below work
     // exactly the same regardless of which tab is currently visible.
-    (function setupSettingsTabs(){
-      const tabs = document.querySelectorAll(".settings-tabs .settings-tab");
+    (function setupSettingsHome(){
+      const modalEl = document.querySelector(".overlay .modal");
+      const titleEl = document.querySelector(".settings-head h3");
+      const backBtn = document.getElementById("settingsBack");
+      const tabs = document.querySelectorAll("#settingsTabs .settings-tab");
       const pages = document.querySelectorAll(".settings-modal-body .settings-page");
-      tabs.forEach(function(tab){
-        tab.addEventListener("click", function(){
-          tabs.forEach(function(t){ t.classList.toggle("active", t === tab); });
-          pages.forEach(function(p){ p.style.display = (p.dataset.page === tab.dataset.page) ? "block" : "none"; });
-          const modalEl = document.querySelector(".overlay .modal");
-          if(modalEl) modalEl.scrollTop = 0;
+      const names = {};
+      tabs.forEach(function(tb){ names[tb.dataset.page] = tb.textContent; });
+      function showHome(){
+        pages.forEach(function(pg){ pg.style.display = "none"; });
+        tabs.forEach(function(tb){ tb.classList.remove("active"); });
+        if(modalEl){ modalEl.classList.remove("st-detail"); modalEl.scrollTop = 0; }
+        if(titleEl) titleEl.textContent = "通用設定";
+      }
+      function openPage(id){
+        pages.forEach(function(pg){ pg.style.display = (pg.dataset.page === id) ? "block" : "none"; });
+        tabs.forEach(function(tb){ tb.classList.toggle("active", tb.dataset.page === id); });
+        if(modalEl){ modalEl.classList.add("st-detail"); modalEl.scrollTop = 0; }
+        if(titleEl) titleEl.textContent = names[id] || "通用設定";
+      }
+      // 隱藏的分頁按鈕留著給「搜尋設定」跳轉用
+      tabs.forEach(function(tb){ tb.addEventListener("click", function(){ openPage(tb.dataset.page); }); });
+      document.querySelectorAll(".st-tile").forEach(function(b){ b.addEventListener("click", function(){ openPage(b.dataset.page); }); });
+      if(backBtn) backBtn.addEventListener("click", showHome);
+      showHome();
+    })();
+
+    // 首頁：快速切換 + 磁貼上的目前設定值。點快速切換＝代替你按對應的原按鈕，所以儲存與預覽都照舊。
+    (function setupSettingsHomeTiles(){
+      const THEME_LABEL = { light: "淺色", dark: "深色", system: "跟隨系統" };
+      const DENSITY_LABEL = { compact: "緊湊", standard: "標準", spacious: "寬鬆" };
+      const themeOf = function(){ return (draft.theme === "dark" || draft.theme === "system") ? draft.theme : "light"; };
+      const densityOf = function(){ return draft.density === "compact" ? "compact" : (draft.density === "spacious" ? "spacious" : "standard"); };
+      const click = function(id){ const el = document.getElementById(id); if(el) el.click(); };
+      const setSub = function(page, text){ const el = document.getElementById("tileSub_" + page); if(el){ el.textContent = text; el.title = text; } };
+      const quick = {
+        q_theme:   { val: function(){ return THEME_LABEL[themeOf()]; }, on: function(){ return false; },
+                     act: function(){ const next = { light: "st_themeDark", dark: "st_themeSystem", system: "st_themeLight" }[themeOf()]; click(next); } },
+        q_eye:     { val: function(){ return draft.eyeCare ? "開" : "關"; }, on: function(){ return !!draft.eyeCare; },
+                     act: function(){ click(draft.eyeCare ? "st_eyeCareOff" : "st_eyeCareOn"); } },
+        q_motion:  { val: function(){ return draft.reduceMotion ? "關" : "開"; }, on: function(){ return !draft.reduceMotion; },
+                     act: function(){ click(draft.reduceMotion ? "st_motionOn" : "st_motionOff"); } },
+        q_density: { val: function(){ return DENSITY_LABEL[densityOf()]; }, on: function(){ return false; },
+                     act: function(){ const next = { compact: "st_densityStandard", standard: "st_densitySpacious", spacious: "st_densityCompact" }[densityOf()]; click(next); } }
+      };
+      function refreshHome(){
+        Object.keys(quick).forEach(function(id){
+          const el = document.getElementById(id);
+          if(!el) return;
+          el.classList.toggle("on", quick[id].on());
+          el.querySelector(".q-val").textContent = quick[id].val();
         });
+        setSub("appearance", THEME_LABEL[themeOf()] + " · " + DENSITY_LABEL[densityOf()]);
+        const motionOn = MOTION_ITEMS.filter(function(it){ return draft[it.key] !== false; }).length;
+        setSub("motion", draft.reduceMotion ? "減少動畫" : (motionOn + "／" + MOTION_ITEMS.length + " 項開啟"));
+        setSub("image", "背景、卡片顯示");
+        setSub("limits", "Lv " + draft.levelMax + " · 裝備 " + draft.gearMax);
+        setSub("search", draft.autoClearSearchOnOpen ? "開啟後自動清空" : "保留搜尋內容");
+        setSub("output", draft.outputFormPersist ? "形態：存為預設" : "形態：僅此次");
+        const repo = document.getElementById("st_syncRepo");
+        setSub("sync", (repo && repo.value.trim()) || "尚未設定");
+        setSub("backup", draft.exportFormat === "plain" ? "純文字格式" : "壓縮格式");
+        setSub("webp", draft.avatarUploadWebp === false ? "上傳不轉 WebP" : "上傳轉 WebP");
+      }
+      Object.keys(quick).forEach(function(id){
+        const el = document.getElementById(id);
+        if(el) el.addEventListener("click", function(){ quick[id].act(); });
       });
+      const modalEl = document.querySelector(".overlay .modal");
+      if(modalEl){
+        // 其他地方改了設定，磁貼上的值也跟著更新（目標元素的處理先跑，這裡是冒泡階段才跑）
+        ["click", "input", "change"].forEach(function(ev){ modalEl.addEventListener(ev, function(){ setTimeout(refreshHome, 0); }); });
+      }
+      refreshHome();
     })();
 
     // 緊湊排列: turn "title + toggle buttons (+ note)" blocks into one row. Elements are
