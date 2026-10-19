@@ -274,10 +274,8 @@
     background: var(--sidebar-bg);
     border-right: 1px solid var(--border);
     display:flex; flex-direction:column;
-    overflow-y:auto;
-    scrollbar-width:none; -ms-overflow-style:none;
+    overflow:hidden;
   }
-  .sidebar::-webkit-scrollbar{ display:none; }
   .sidebar-resizer{
     width:6px; flex-shrink:0; cursor:col-resize; background:var(--bg);
     position:relative; z-index:5;
@@ -356,7 +354,8 @@
   }
   .filter-foot{ display:flex; justify-content:space-between; align-items:center; margin-top:12px; gap:8px; }
   .filter-foot .filter-hint{ font-size:11px; color:var(--ink-soft); }
-  .school-list{ list-style:none; margin:0; padding: 4px 8px 16px; flex:1; }
+  .school-list{ list-style:none; margin:0; padding: 4px 8px 12px; flex:1 1 auto; min-height:0; position:relative; overflow-y:auto; scrollbar-width:none; -ms-overflow-style:none; }
+  .school-list::-webkit-scrollbar{ display:none; }
   .school-item{
     display:flex; align-items:center; justify-content:space-between;
     padding: 9px 10px; border-radius:8px; margin-bottom:2px;
@@ -379,7 +378,8 @@
   body.school-icon-blackbg .school-icon,
   body.school-icon-blackbg .chip-icon{ background:#000; }
   .school-item .count{ font-family: var(--mono); font-size:11px; color:var(--ink-soft); font-weight:600; }
-  .add-school-btn{ width: calc(100% - 16px); margin: 4px 8px; }
+  .add-school-btn{ width: calc(100% - 16px); margin: 8px; flex-shrink:0; }
+  .sidebar-head{ flex-shrink:0; }
   .chip .chip-icon{ width:16px; height:16px; border-radius:5px; object-fit:cover; margin-right:5px; vertical-align:-3px; }
   .chip .chip-dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
 
@@ -678,6 +678,13 @@
     background:var(--panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.28);
   }
   .name-popover[hidden]{ display:none; }
+  /* 小視窗內容太長時在裡面滑動，但不顯示捲軸；還有內容時底部用淡出提示 */
+  .name-popover{ scrollbar-width:none; -ms-overflow-style:none; }
+  .name-popover::-webkit-scrollbar{ display:none; width:0; height:0; }
+  .name-popover.has-more::after{
+    content:""; display:block; position:sticky; bottom:-12px; height:28px; margin:-28px -12px -12px;
+    background:linear-gradient(to bottom, rgba(0,0,0,0), var(--panel)); pointer-events:none;
+  }
   #attrPopover{ left:0; right:auto; width:400px; }
   .name-popover .settings-page{ margin:0; }
   .name-popover .modal-section{ margin-bottom:0; }
@@ -734,7 +741,14 @@
   .setting-help.tip-left::after{ left:auto; right:0; }
   .slider-field label .setting-help{ margin-right:auto; }
   @keyframes helpTipIn{ from{ opacity:0; transform:translateY(-3px); } to{ opacity:1; transform:none; } }
-  .setting-help:hover::after, .setting-help:focus::after{ display:block; animation: helpTipIn .14s ease-out; }
+  .setting-help::after{ display:none !important; }   /* 提示框改用下面的浮動元素，才不會被視窗邊緣裁掉或跑出螢幕 */
+  .help-tip-float{
+    position:fixed; z-index:100000; width:max-content; max-width:min(240px, calc(100vw - 16px)); box-sizing:border-box;
+    padding:7px 9px; border-radius:8px; background:var(--panel); color:var(--ink); border:1px solid var(--border);
+    box-shadow:0 6px 18px rgba(0,0,0,.25); font-size:12px; font-weight:400; line-height:1.5; text-align:left;
+    white-space:normal; pointer-events:none; animation:helpTipIn .14s ease-out;
+  }
+  .help-tip-float[hidden]{ display:none; }
   .setting-row .theme-toggle-row, .setting-row > .field{ margin:0; flex:0 1 auto; }
   .setting-row .theme-toggle-row{ gap:0; flex-wrap:nowrap; }
   .setting-row .theme-opt{ flex:none; border-radius:0; margin-left:-1px; white-space:nowrap; }
@@ -3076,6 +3090,9 @@
     addChip.textContent = "+ 新增學校";
     addChip.addEventListener("click", openAddSchoolModal);
     mobile.appendChild(addChip);
+
+    const activeItem = list.querySelector(".school-item.active");
+    if(activeItem) list.scrollTop = activeItem.offsetTop - list.clientHeight / 2 + activeItem.offsetHeight / 2;
   }
 
   async function refreshCounts(){
@@ -8311,6 +8328,58 @@
     // 同組角色版本 · 好感度參考: the 分組／簡寫 page is moved (not copied)
     // into a small popover under the ⋯ button, so its ids and the
     // render functions that fill it keep working unchanged.
+    // 小視窗（分組／屬性裝甲）要放得進編輯視窗看得見的範圍：下方空間不夠就改往上開，
+    // 還是不夠就把高度縮到剩下的空間，超出的內容在小視窗裡面滑，不會被視窗邊緣切掉。
+    function placePopover(pop){
+      if(!pop || pop.hidden || !modalEl.isConnected) return;
+      const field = pop.offsetParent || pop.parentElement;
+      if(!field) return;
+      const fr = field.getBoundingClientRect();
+      const mr = modalEl.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const vTop = Math.max(mr.top, vv ? vv.offsetTop : 0);
+      const vBottom = Math.min(mr.bottom, vv ? vv.offsetTop + vv.height : window.innerHeight);
+      const gap = 6, pad = 10;
+      pop.style.maxHeight = "";
+      pop.style.top = "";
+      pop.style.bottom = "";
+      const natural = Math.min(pop.scrollHeight + 2, 420);
+      const below = vBottom - fr.bottom - gap - pad;
+      const above = fr.top - vTop - gap - pad;
+      let openUp = false, room = below;
+      if(below < natural && above > below){ openUp = true; room = above; }
+      pop.style.maxHeight = Math.min(Math.max(120, room), 420) + "px";
+      if(openUp){ pop.style.top = "auto"; pop.style.bottom = "calc(100% + " + gap + "px)"; }
+      updatePopoverMore(pop);
+    }
+    // 還有內容沒滑到時，底部顯示淡出提示（捲軸已隱藏）
+    function updatePopoverMore(pop){
+      if(!pop) return;
+      pop.classList.toggle("has-more", pop.scrollHeight - pop.clientHeight > 2 && pop.scrollTop + pop.clientHeight < pop.scrollHeight - 2);
+    }
+    const openPopovers = function(){ return ["namePopover", "attrPopover"].map(function(id){ return document.getElementById(id); }).filter(function(p){ return p && !p.hidden; }); };
+    function replaceOpenPopovers(){
+      if(!modalEl.isConnected){
+        window.removeEventListener("resize", replaceOpenPopovers);
+        if(window.visualViewport) window.visualViewport.removeEventListener("resize", replaceOpenPopovers);
+        return;
+      }
+      openPopovers().forEach(placePopover);
+    }
+    function bindPopoverReposition(){
+      ["namePopover", "attrPopover"].forEach(function(id){
+        const el = document.getElementById(id);
+        if(el) el.addEventListener("scroll", function(){ updatePopoverMore(el); }, { passive: true });
+      });
+      window.addEventListener("resize", replaceOpenPopovers);
+      if(window.visualViewport) window.visualViewport.addEventListener("resize", replaceOpenPopovers);
+      modalEl.addEventListener("scroll", replaceOpenPopovers, { passive: true });
+      if(window.ResizeObserver){
+        // 小視窗裡的內容高度變了（例如換組別、加減角色）也重新算
+        const ro = new ResizeObserver(function(){ replaceOpenPopovers(); });
+        ["namePopover", "attrPopover"].forEach(function(id){ const el = document.getElementById(id); if(el) ro.observe(el); });
+      }
+    }
     function closeNamePopover(){
       const pop = document.getElementById("namePopover");
       if(!pop || pop.hidden) return;
@@ -8329,6 +8398,7 @@
       pop.appendChild(page);
       page.style.display = "block";
       pop.hidden = false;
+      placePopover(pop);
       const btn = document.getElementById("btnNameMore");
       if(btn){ btn.classList.add("active"); btn.setAttribute("aria-expanded", "true"); }
     }
@@ -8356,6 +8426,7 @@
       pop.appendChild(page);
       page.style.display = "block";
       pop.hidden = false;
+      placePopover(pop);
     }
 
     function renderAbbrevMeaningBox(){
@@ -8761,6 +8832,7 @@
       if(cat === seCat && c.classList.contains("ov-label")){ seClosePages(); return; }
       if(cat !== seCat) seOpen(cat);
     });
+    bindPopoverReposition();
     (function(){
       const nm = document.getElementById("btnNameMore");
       const pop = document.getElementById("namePopover");
@@ -12984,6 +13056,66 @@
     document.addEventListener("keydown", function(e){ if(e.key === "Escape") closePanel(); });
     window.addEventListener("resize", closePanel);
     syncBtn();
+  })();
+
+  // ---- 「?」說明提示框：一個浮動元素，位置夾在螢幕範圍內（上下左右都不會超出） ----
+  (function setupHelpTips(){
+    let tip = null, cur = null;
+    const touchOnly = window.matchMedia && window.matchMedia("(hover:none)").matches;
+    function ensure(){
+      if(!tip){
+        tip = document.createElement("div");
+        tip.className = "help-tip-float";
+        tip.setAttribute("role", "tooltip");
+        tip.hidden = true;
+        document.body.appendChild(tip);
+      }
+      return tip;
+    }
+    function hide(){ if(tip) tip.hidden = true; cur = null; }
+    function show(help){
+      const text = help.getAttribute("data-tip");
+      if(!text) return;
+      const el = ensure();
+      cur = help;
+      el.textContent = text;
+      el.hidden = false;
+      el.style.left = "0px"; el.style.top = "0px";      // 先放在左上角量出實際尺寸
+      const vv = window.visualViewport;
+      const ox = vv ? vv.offsetLeft : 0, oy = vv ? vv.offsetTop : 0;
+      const vw = vv ? vv.width : window.innerWidth, vh = vv ? vv.height : window.innerHeight;
+      const r = help.getBoundingClientRect(), tr = el.getBoundingClientRect();
+      const m = 8, gap = 6;
+      const left = Math.min(Math.max(r.left, ox + m), ox + vw - tr.width - m);     // 左右都夾在螢幕內
+      let top = r.bottom + gap;                                                      // 預設放下面
+      if(top + tr.height > oy + vh - m){                                             // 下面放不下就放上面
+        const up = r.top - gap - tr.height;
+        top = up >= oy + m ? up : Math.max(oy + m, oy + vh - tr.height - m);
+      }
+      el.style.left = Math.round(left) + "px";
+      el.style.top = Math.round(top) + "px";
+    }
+    const helpOf = function(target){ return target && target.closest ? target.closest(".setting-help") : null; };
+    document.addEventListener("mouseover", function(e){
+      if(cur && !cur.isConnected) hide();          // 設定視窗關掉時，殘留的提示框也一併收掉
+      const h = helpOf(e.target);
+      if(h && h !== cur) show(h);
+    });
+    document.addEventListener("mouseout", function(e){
+      const h = helpOf(e.target);
+      if(h && !h.contains(e.relatedTarget)) hide();
+    });
+    document.addEventListener("focusin", function(e){ const h = helpOf(e.target); if(h) show(h); });
+    document.addEventListener("focusout", function(e){ if(helpOf(e.target)) hide(); });
+    document.addEventListener("click", function(e){
+      const h = helpOf(e.target);
+      if(!h || !touchOnly) return;                 // 觸控裝置：點一下顯示、再點一下收起
+      if(cur === h) hide(); else show(h);
+    });
+    document.addEventListener("pointerdown", function(e){ if(!helpOf(e.target)) hide(); });
+    document.addEventListener("keydown", function(e){ if(e.key === "Escape") hide(); });
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
   })();
   document.getElementById("btnEditSchool").addEventListener("click", openEditSchoolModal);
   document.getElementById("btnAddStudent").addEventListener("click", function(){ openStudentModal(null); });
