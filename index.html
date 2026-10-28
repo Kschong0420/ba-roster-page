@@ -154,6 +154,22 @@
     pointer-events:none;
   }
   .toast.toast-out{ animation: toastOut .28s ease both; }
+  .undo-toast{ pointer-events:auto; display:flex; align-items:center; gap:14px; }
+  .undo-toast button{ border:none; background:none; color:#8FC4F2; font-weight:800; font-size:13px; padding:0 2px; cursor:pointer; }
+  .undo-toast button:disabled{ opacity:.5; cursor:default; }
+  .ui-dialog-backdrop{ position:fixed; inset:0; z-index:120; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(20,26,45,.5); animation:overlayFadeIn .15s ease both; }
+  .ui-dialog{ background:var(--panel); color:var(--ink); border:1px solid var(--border); border-radius:14px; width:100%; max-width:390px; padding:20px 22px 16px; box-shadow:0 16px 40px rgba(15,20,35,.35); }
+  body.corner-sharp .ui-dialog{ border-radius:4px !important; }
+  .ui-dialog h3{ margin:0 0 8px; font-size:16px; }
+  .ui-dialog-msg{ font-size:13px; line-height:1.65; margin-bottom:16px; }
+  .ui-dialog-actions{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+  .trash-row{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
+  .trash-row:last-child{ border-bottom:none; }
+  .trash-info{ flex:1; min-width:0; }
+  .trash-name{ font-size:13px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .trash-meta{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+  .trash-btns{ display:flex; gap:6px; flex-shrink:0; }
+  .trash-empty{ text-align:center; color:var(--ink-soft); font-size:13px; padding:26px 0; }
   .avatar-card.just-jumped{ z-index:3; }
   .card-ripple{
     position:fixed; border:3px solid #5FB0FF; border-radius:12px;
@@ -343,6 +359,12 @@
   .filter-title{ font-size:11px; font-weight:700; color:var(--ink-soft); margin:10px 0 6px; }
   .filter-title:first-child{ margin-top:0; }
   .filter-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .filter-affinity{ display:flex; align-items:center; gap:8px; }
+  .filter-affinity input{ width:84px; padding:5px 8px; font-family:var(--mono); }
+  .filter-affinity .aff-sep{ font-size:12px; color:var(--ink-soft); }
+  .filter-help{ position:relative; display:inline-flex; align-items:center; justify-content:center; width:11px; height:11px; margin-left:2px; border-radius:50%; border:1px solid var(--ink-soft); color:var(--ink-soft); font-size:8px; font-weight:700; line-height:1; cursor:help; outline:none; }
+  .filter-help-tip{ display:none; position:absolute; right:-4px; bottom:calc(100% + 6px); z-index:2; width:max-content; max-width:160px; white-space:nowrap; padding:6px 8px; border-radius:6px; background:var(--ink); color:var(--panel); font-size:11px; font-weight:500; line-height:1.5; text-align:left; box-shadow:0 4px 12px rgba(0,0,0,.25); }
+  .filter-help:hover .filter-help-tip, .filter-help:focus .filter-help-tip{ display:block; }
   .filter-chip{ display:inline-flex; align-items:center; gap:5px; }
   .filter-chip.icon-only{ padding:4px; }
   .filter-chip.icon-only .chip-ico{ width:24px; height:24px; }
@@ -1462,6 +1484,7 @@
   .se-ov{ display:flex; flex-direction:column; padding:2px 12px; margin-bottom:10px; border:1px solid var(--border); border-radius:10px; }
   .ov-row{ display:grid; grid-template-columns:30px 1fr; gap:10px; align-items:center; padding:5px 0; }
   .ov-row + .ov-row{ border-top:1px solid var(--border); }
+  .ov-row[data-rowcat]{ cursor:pointer; }
   .ov-label{ font-size:12px; font-weight:700; color:var(--ink-soft); text-align:left; }
   .ov-cells{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:0 14px; }
   .ov-cell{ position:relative; display:flex; align-items:baseline; justify-content:flex-start; gap:6px; min-width:0; padding:4px 0 7px;
@@ -1518,6 +1541,7 @@
       <button class="btn" id="btnExport">匯出備份</button>
       <button class="btn" id="btnImport">匯入備份</button>
       <button class="btn btn-with-dot" id="btnAbbrevList">簡寫清單<span class="notif-dot" id="abbrevNotifDot"></span></button>
+      <button class="btn" id="btnTrash">最近刪除</button>
       <button class="btn" id="btnSettings">通用設定</button>
       <input type="file" id="importFileInput" accept=".json,.gz,application/json,application/gzip">
     </div>
@@ -3200,7 +3224,7 @@
     const searchInput = document.getElementById("searchInput");
     if(searchInput){
       searchInput.disabled = on;
-      searchInput.title = on ? "撤銷模式中無法搜尋" : "";
+      searchInput.title = on ? "已選清單中無法搜尋" : "";
     }
     updateOutputCount();
     await renderMain();
@@ -3219,7 +3243,7 @@
         }
       }
     } else {
-      if(selectedIds.length >= 10){ alert("最多只能選擇10位學生"); return; }
+      if(selectedIds.length >= 10){ showToast("最多只能選擇 10 位學生"); return; }
       const allForCheck = await getAllStudents();
       const target = allForCheck.find(function(s){ return s.id === id; });
       if(target){
@@ -3317,7 +3341,7 @@
 
   // 篩選: tick several values per group. Within a group any match counts (OR),
   // across groups all must match (AND). Saved so it survives a reload.
-  const studentFilter = { attr: [], armor: [], star: [], school: [] };
+  const studentFilter = { attr: [], armor: [], star: [], school: [], affMin: null, affMax: null };
   (function loadFilterState(){
     try{
       const saved = JSON.parse(localStorage.getItem("ba-roster-filter") || "null");
@@ -3325,14 +3349,17 @@
       studentFilter.attr = (saved.attr || []).filter(function(id){ return ATTRIBUTES.some(function(a){ return a.id === id; }); });
       studentFilter.armor = (saved.armor || []).filter(function(id){ return ARMORS.some(function(a){ return a.id === id; }); });
       studentFilter.star = (saved.star || []).filter(function(n){ return Number.isInteger(n) && n >= 1 && n <= 9; });
-      studentFilter.school = (saved.school || []).filter(function(id){ return typeof id === "string"; });   // 學校可能已被刪除，用的時候再過濾
+      studentFilter.school = (saved.school || []).filter(function(id){ return typeof id === "string"; });
+      const okAff = function(n){ return Number.isInteger(n) && n >= 1 && n <= 100; };
+      studentFilter.affMin = okAff(saved.affMin) ? saved.affMin : (okAff(saved.affinity) ? saved.affinity : null);   // 舊版單一數值 → 轉成區間
+      studentFilter.affMax = okAff(saved.affMax) ? saved.affMax : (okAff(saved.affinity) ? saved.affinity : null);   // 學校可能已被刪除，用的時候再過濾
     }catch(e){}
   })();
   function saveFilterState(){
     try{ localStorage.setItem("ba-roster-filter", JSON.stringify(studentFilter)); }catch(e){}
   }
   function filterCount(){
-    return (filterIgnoresAttr() ? 0 : studentFilter.attr.length) + activeSchoolFilter().length + studentFilter.armor.length + studentFilter.star.length;
+    return (filterIgnoresAttr() ? 0 : studentFilter.attr.length) + activeSchoolFilter().length + studentFilter.armor.length + studentFilter.star.length + ((studentFilter.affMin != null || studentFilter.affMax != null) ? 1 : 0);
   }
   function studentFilterActive(){ return filterCount() > 0; }
   // The attribute group is ignored while browsing a single attribute (it would be redundant).
@@ -3356,6 +3383,8 @@
       if(schoolIds.length && schoolIds.indexOf(s.schoolId) === -1) return false;
       if(studentFilter.armor.length && studentFilter.armor.indexOf(s.armor) === -1) return false;
       if(studentFilter.star.length && studentFilter.star.indexOf(s.weaponStar || 0) === -1) return false;
+      if(studentFilter.affMin != null && (s.affinity || 0) < studentFilter.affMin) return false;
+      if(studentFilter.affMax != null && (s.affinity || 0) > studentFilter.affMax) return false;
       return true;
     });
   }
@@ -3367,7 +3396,9 @@
     btn.title = n ? "篩選（已選 " + n + " 項）" : "篩選";
     btn.setAttribute("aria-label", btn.title);
     btn.classList.toggle("active", n > 0);
-    if(document.getElementById("filterPanel")) renderFilterPanel();
+    // 正在輸入好感度時不要重畫面板，否則輸入框會失去焦點
+    const _ae = document.activeElement;
+    if(document.getElementById("filterPanel") && !(_ae && _ae.classList && _ae.classList.contains("filter-aff-input"))) renderFilterPanel();
   }
   function showFilteredEmpty(sub, grid, empty, normalVis, filterOnly){
     sub.textContent = "沒有符合篩選條件的學生";
@@ -3380,7 +3411,7 @@
     document.getElementById("btnClearFilterEmpty").addEventListener("click", clearStudentFilter);
   }
   async function clearStudentFilter(){
-    studentFilter.attr = []; studentFilter.armor = []; studentFilter.star = []; studentFilter.school = [];
+    studentFilter.attr = []; studentFilter.armor = []; studentFilter.star = []; studentFilter.school = []; studentFilter.affMin = null; studentFilter.affMax = null;
     saveFilterState();
     syncFilterUI();
     if(document.getElementById("filterPanel")) renderFilterPanel();
@@ -3427,6 +3458,11 @@
       (filterIgnoresAttr() ? "" : group("attr", "屬性", ATTRIBUTES.map(function(a){ return { value: a.id, label: a.name }; }))) +
       group("armor", "裝甲", ARMORS.map(function(a){ return { value: a.id, label: a.name }; })) +
       group("star", "星數", stars) +
+      '<div class="filter-title">好感度</div><div class="filter-affinity">' +
+        '<input type="number" id="filterAffMin" class="view-select filter-aff-input" min="1" max="100" step="1" inputmode="numeric" placeholder="最小" value="' + (studentFilter.affMin != null ? studentFilter.affMin : "") + '" aria-label="好感度下限">' +
+        '<span class="aff-sep">～</span>' +
+        '<input type="number" id="filterAffMax" class="view-select filter-aff-input" min="1" max="100" step="1" inputmode="numeric" placeholder="最大" value="' + (studentFilter.affMax != null ? studentFilter.affMax : "") + '" aria-label="好感度上限">' +
+        '<span class="filter-help" tabindex="0" role="note" aria-label="只填一邊＝以上／以下；兩邊相同＝剛好等於">?<span class="filter-help-tip">只填一邊＝以上／以下<br>兩邊相同＝剛好等於</span></span></div>' +
       ((filterIgnoresSchool() || !schools.length) ? "" : group("school", "學校", orderedSchools().map(function(s){ return { value: s.id, label: s.name }; }))) +
       '<div class="filter-foot"><span class="filter-hint">' + (studentFilterActive() ? "借用學生不會顯示" : "") + '</span>' +
       '<button type="button" class="btn btn-ghost btn-sm" id="filterClearBtn"' + (studentFilterActive() ? "" : " disabled") + '>清除全部</button></div>';
@@ -3441,6 +3477,25 @@
         saveFilterState();
         syncFilterUI();
         renderFilterPanel();
+        await renderMain();
+      });
+    });
+    const parseAff = function(el){
+      const raw = el.value.trim();
+      if(raw === "") return null;
+      const n = parseInt(raw, 10);
+      return (Number.isInteger(n) && n >= 1) ? Math.min(100, n) : null;
+    };
+    p.querySelectorAll(".filter-aff-input").forEach(function(inp){
+      inp.addEventListener("input", async function(){
+        studentFilter.affMin = parseAff(document.getElementById("filterAffMin"));
+        studentFilter.affMax = parseAff(document.getElementById("filterAffMax"));
+        saveFilterState();
+        syncFilterUI();   // 更新篩選按鈕上的數字（輸入中不會重畫面板）
+        const cb = document.getElementById("filterClearBtn");
+        if(cb) cb.disabled = !studentFilterActive();
+        const hint = p.querySelector(".filter-foot .filter-hint");
+        if(hint) hint.textContent = studentFilterActive() ? "借用學生不會顯示" : "";
         await renderMain();
       });
     });
@@ -3899,7 +3954,7 @@
     setViewControlsVisible(false, false);
     setNormalControlsVisible(false, false, false);
 
-    title.textContent = "撤銷模式：已選擇的角色";
+    title.textContent = "已選清單：已選擇的角色";
     const all = await getAllStudents();
     const selected = selectedIds
       .map(function(id){ return all.find(function(s){ return s.id === id; }); })
@@ -4432,6 +4487,221 @@
     }, ms);
   }
 
+
+  // ---------- 自訂確認對話框（取代原生 confirm / alert，按鈕文字清楚、可有多個選項） ----------
+  // buttons: [{ label, value, kind: "primary" | "danger" | undefined }]，由左到右顯示。
+  // 按 Esc 或點背景 = 回傳 cancelValue。focusIndex 指定預設聚焦的按鈕（破壞性操作請放在取消上）。
+  function askDialog(opts){
+    return new Promise(function(resolve){
+      const buttons = opts.buttons || [];
+      const cancelValue = opts.cancelValue !== undefined ? opts.cancelValue : null;
+      const prevFocus = document.activeElement;
+      const back = document.createElement("div");
+      back.className = "ui-dialog-backdrop";
+      back.innerHTML = '<div class="ui-dialog" role="alertdialog" aria-modal="true">' +
+        (opts.title ? '<h3>' + escapeHtml(opts.title) + '</h3>' : '') +
+        '<div class="ui-dialog-msg">' + escapeHtml(opts.message || "").replace(/\n/g, "<br>") + '</div>' +
+        '<div class="ui-dialog-actions">' + buttons.map(function(b, i){
+          const cls = b.kind === "primary" ? "btn-primary" : (b.kind === "danger" ? "btn-danger" : "btn-ghost");
+          return '<button type="button" class="btn ' + cls + '" data-i="' + i + '">' + escapeHtml(b.label) + '</button>';
+        }).join("") + '</div></div>';
+      document.body.appendChild(back);
+      const btnEls = Array.prototype.slice.call(back.querySelectorAll("button"));
+      let done = false;
+      function finish(v){
+        if(done) return;
+        done = true;
+        document.removeEventListener("keydown", onKey, true);
+        if(back.parentNode) back.parentNode.removeChild(back);
+        try{ if(prevFocus && prevFocus.focus) prevFocus.focus(); }catch(_){}
+        resolve(v);
+      }
+      function onKey(e){
+        if(e.key === "Escape"){
+          e.preventDefault(); e.stopImmediatePropagation();
+          finish(cancelValue);
+        } else if(e.key === "Tab" && btnEls.length){
+          const i = btnEls.indexOf(document.activeElement);
+          e.preventDefault();
+          btnEls[(Math.max(i, 0) + (e.shiftKey ? btnEls.length - 1 : 1)) % btnEls.length].focus();
+        }
+      }
+      document.addEventListener("keydown", onKey, true);
+      btnEls.forEach(function(b){
+        b.addEventListener("click", function(){ finish(buttons[+b.getAttribute("data-i")].value); });
+      });
+      let pressOnBack = false;
+      back.addEventListener("pointerdown", function(e){ pressOnBack = (e.target === back); });
+      back.addEventListener("click", function(e){ if(pressOnBack && e.target === back) finish(cancelValue); pressOnBack = false; });
+      const fi = opts.focusIndex != null ? opts.focusIndex : Math.max(0, buttons.map(function(b){ return b.kind; }).lastIndexOf("primary"));
+      if(btnEls[fi]) btnEls[fi].focus();
+    });
+  }
+
+  // 帶「復原」按鈕的提示（刪除後 8 秒內可以直接按）
+  function showUndoToast(msg, onUndo){
+    const old = document.getElementById("undoToast");
+    if(old && old.parentNode) old.parentNode.removeChild(old);
+    const el = document.createElement("div");
+    el.id = "undoToast";
+    el.className = "toast undo-toast";
+    el.innerHTML = '<span></span><button type="button">復原</button>';
+    el.firstChild.textContent = msg;
+    const btn = el.querySelector("button");
+    const timer = setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 8000);
+    btn.addEventListener("click", async function(){
+      clearTimeout(timer);
+      btn.disabled = true;
+      try{ await onUndo(); }catch(err){ showToast("復原失敗"); }
+      if(el.parentNode) el.parentNode.removeChild(el);
+    });
+    document.body.appendChild(el);
+    announce(msg);
+  }
+
+  // ---------- 最近刪除（獨立的 IndexedDB，保留 30 天） ----------
+  const TRASH_DB_NAME = "ba_roster_trash";
+  const TRASH_KEEP_DAYS = 30;
+  let _trashDb = null;
+  function trashOpen(){
+    if(_trashDb) return Promise.resolve(_trashDb);
+    return new Promise(function(res, rej){
+      const req = indexedDB.open(TRASH_DB_NAME, 1);
+      req.onupgradeneeded = function(e){ e.target.result.createObjectStore("items", { keyPath: "id" }); };
+      req.onsuccess = function(e){ _trashDb = e.target.result; res(_trashDb); };
+      req.onerror = function(){ rej(req.error); };
+    });
+  }
+  async function trashTx(mode, fn){
+    const d = await trashOpen();
+    const t = d.transaction(["items"], mode);
+    const r = fn(t.objectStore("items"));
+    return new Promise(function(res, rej){
+      t.oncomplete = function(){ res(r ? r.result : undefined); };
+      t.onerror = t.onabort = function(){ rej(t.error); };
+    });
+  }
+  async function trashPurgeOld(){
+    const items = await trashTx("readonly", function(st){ return st.getAll(); });
+    const limit = Date.now() - TRASH_KEEP_DAYS * 86400000;
+    const old = (items || []).filter(function(it){ return !(it.deletedAt > limit); });
+    if(!old.length) return;
+    await trashTx("readwrite", function(st){ old.forEach(function(it){ st.delete(it.id); }); });
+  }
+  // 先把資料放進最近刪除；放不進去時讓使用者決定要不要直接永久刪除。回傳 true = 可以繼續刪除。
+  async function moveToTrash(entry){
+    try{
+      await trashTx("readwrite", function(st){ st.put(entry); });
+      return true;
+    }catch(err){
+      const v = await askDialog({
+        title: "無法保留到「最近刪除」",
+        message: "瀏覽器儲存空間可能不足。\n要直接永久刪除「" + entry.name + "」嗎？（之後無法還原）",
+        buttons: [{ label: "取消", value: false }, { label: "永久刪除", value: true, kind: "danger" }],
+        cancelValue: false, focusIndex: 0
+      });
+      return !!v;
+    }
+  }
+  async function restoreFromTrash(item){
+    if(item.type === "student"){
+      const st = item.student;
+      if(st.schoolId){
+        const sc = await getAllSchools();
+        if(!sc.some(function(x){ return x.id === st.schoolId; })){
+          showToast("原本的學校已被刪除，請先還原該學校");
+          return false;
+        }
+      }
+      if(st.borrowed){
+        const other = await findOtherBorrowed(st.id);
+        if(other){ showToast("已有借用學生「" + other.name + "」，無法還原"); return false; }
+      }
+      await putStudent(st);
+    } else {
+      await putSchool(item.school);
+      for(let i = 0; i < (item.students || []).length; i++) await putStudent(item.students[i]);
+    }
+    await trashTx("readwrite", function(store){ store.delete(item.id); });
+    schools = await getAllSchools();
+    await refreshCounts();
+    await renderMain();
+    showToast("已還原「" + item.name + "」");
+    return true;
+  }
+  function trashAgeText(ts){
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if(mins < 1) return "剛剛刪除";
+    if(mins < 60) return mins + " 分鐘前刪除";
+    const hrs = Math.floor(mins / 60);
+    if(hrs < 24) return hrs + " 小時前刪除";
+    return Math.floor(hrs / 24) + " 天前刪除";
+  }
+  async function openTrashModal(){
+    let items;
+    try{ items = await trashTx("readonly", function(st){ return st.getAll(); }); }
+    catch(err){ showToast("無法讀取「最近刪除」"); return; }
+    items = (items || []).sort(function(a, b){ return b.deletedAt - a.deletedAt; });
+    showModal(
+      '<h3>最近刪除</h3>' +
+      '<div class="modal-sub">刪除的學生與學校會保留 ' + TRASH_KEEP_DAYS + ' 天，期限過後自動清除</div>' +
+      '<div id="trashList"></div>' +
+      '<div class="modal-actions"><button class="btn btn-danger" id="trashEmptyBtn">清空</button>' +
+      '<div class="right"><button class="btn btn-ghost" id="trashCloseBtn">關閉</button></div></div>'
+    );
+    const listEl = document.getElementById("trashList");
+    const emptyBtn = document.getElementById("trashEmptyBtn");
+    function draw(){
+      emptyBtn.disabled = !items.length;
+      if(!items.length){ listEl.innerHTML = '<div class="trash-empty">沒有最近刪除的項目</div>'; return; }
+      listEl.innerHTML = items.map(function(it){
+        const left = Math.max(0, Math.ceil(TRASH_KEEP_DAYS - (Date.now() - it.deletedAt) / 86400000));
+        const kind = it.type === "school" ? "學校" : "學生";
+        const extra = it.type === "school" ? "含 " + (it.students || []).length + " 位學生 · " : "";
+        return '<div class="trash-row" data-id="' + escapeHtml(it.id) + '">' +
+          '<div class="trash-info"><div class="trash-name">[' + kind + '] ' + escapeHtml(it.name) + '</div>' +
+          '<div class="trash-meta">' + extra + trashAgeText(it.deletedAt) + ' · 剩 ' + left + ' 天</div></div>' +
+          '<div class="trash-btns"><button type="button" class="btn btn-sm" data-act="restore">還原</button>' +
+          '<button type="button" class="btn btn-sm btn-danger" data-act="purge">永久刪除</button></div></div>';
+      }).join("");
+    }
+    draw();
+    listEl.addEventListener("click", async function(e){
+      const b = e.target.closest && e.target.closest("button[data-act]"); if(!b) return;
+      const row = b.closest(".trash-row");
+      const it = items.find(function(x){ return x.id === row.getAttribute("data-id"); }); if(!it) return;
+      if(b.getAttribute("data-act") === "restore"){
+        b.disabled = true;
+        let ok = false;
+        try{ ok = await restoreFromTrash(it); }catch(err){ showToast("還原失敗"); }
+        if(ok){ items = items.filter(function(x){ return x !== it; }); }
+        draw();
+      } else {
+        const v = await askDialog({
+          title: "永久刪除", message: "「" + it.name + "」將被永久刪除，無法還原。",
+          buttons: [{ label: "取消", value: false }, { label: "永久刪除", value: true, kind: "danger" }],
+          cancelValue: false, focusIndex: 0
+        });
+        if(!v) return;
+        try{ await trashTx("readwrite", function(st){ st.delete(it.id); }); items = items.filter(function(x){ return x !== it; }); }
+        catch(err){ showToast("刪除失敗"); }
+        draw();
+      }
+    });
+    emptyBtn.addEventListener("click", async function(){
+      const v = await askDialog({
+        title: "清空最近刪除", message: "共 " + items.length + " 個項目將被永久刪除，無法還原。",
+        buttons: [{ label: "取消", value: false }, { label: "全部永久刪除", value: true, kind: "danger" }],
+        cancelValue: false, focusIndex: 0
+      });
+      if(!v) return;
+      try{ await trashTx("readwrite", function(st){ st.clear(); }); items = []; }
+      catch(err){ showToast("清空失敗"); }
+      draw();
+    });
+    document.getElementById("trashCloseBtn").addEventListener("click", closeModal);
+  }
+
   function escapeHtml(str){
     return String(str ?? "").replace(/[&<>"']/g, function(c){
       return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c];
@@ -4439,8 +4709,22 @@
   }
 
   const overlay = document.getElementById("overlay");
+  let closeModalPending = false;
   function closeModal(){
-    if(modalBeforeClose && !modalBeforeClose()) return;
+    if(closeModalPending) return;
+    if(modalBeforeClose){
+      const r = modalBeforeClose();
+      if(r && typeof r.then === "function"){
+        // 非同步確認（例如自訂的「儲存／不儲存／取消」對話框）
+        closeModalPending = true;
+        r.then(function(ok){ closeModalPending = false; if(ok) closeModalNow(); }, function(){ closeModalPending = false; });
+        return;
+      }
+      if(!r) return;
+    }
+    closeModalNow();
+  }
+  function closeModalNow(){
     modalBeforeClose = null;
     if(overlay.style.display !== "flex") return;
     let finished = false;
@@ -7259,12 +7543,22 @@
       await renderMain();
     });
     document.getElementById("deleteSchoolBtn").addEventListener("click", async function(){
-      if(!confirm('確定要刪除「' + school.name + '」嗎？底下所有學生資料也會一併刪除，此動作無法復原。')) return;
+      const kids = await getStudentsBySchool(school.id);
+      const go = await askDialog({
+        title: "刪除學校",
+        message: "確定要刪除「" + school.name + "」嗎？\n底下 " + kids.length + " 位學生也會一併刪除。\n刪除後可以在「最近刪除」還原（保留 " + TRASH_KEEP_DAYS + " 天）。",
+        buttons: [{ label: "取消", value: false }, { label: "刪除", value: true, kind: "danger" }],
+        cancelValue: false, focusIndex: 0
+      });
+      if(!go) return;
+      const entry = { id: uid(), type: "school", name: school.name, deletedAt: Date.now(), school: school, students: kids };
+      if(!(await moveToTrash(entry))) return;
       await deleteSchool(school.id);
       schools = schools.filter(s => s.id !== school.id);
       currentSchoolId = schools.length ? schools[0].id : null;
       closeModal();
       await renderMain();
+      showUndoToast("已刪除學校「" + school.name + "」", function(){ return restoreFromTrash(entry); });
     });
   }
 
@@ -8115,7 +8409,7 @@
     // button is hidden (same idea as 自動複製 in the export window). The
     // choice is remembered across windows. All saves go through
     // autosaveChain so they run one at a time, in order.
-    let studentAutoSave = localStorage.getItem("ba-roster-student-autosave") === "1";
+    let studentAutoSave = localStorage.getItem("ba-roster-student-autosave") !== "0";   // 預設開啟自動儲存（只有使用者明確關掉才算關）
     let autosaveChain = Promise.resolve();
     let autosaveTimer = null;
     let autosaveLastJson = null;       // form state as of the last save (or as opened)
@@ -8800,7 +9094,7 @@
       ];
       let h = rows.map(function(row){
         const cat = row[1];
-        return '<div class="ov-row"><button type="button" class="ov-label' + (seCat === cat ? " sel" : "") + '" data-cat="' + cat + '">' + row[0] + '</button><div class="ov-cells">' + row[2].map(function(c){
+        return '<div class="ov-row" data-rowcat="' + cat + '"><button type="button" class="ov-label' + (seCat === cat ? " sel" : "") + '" data-cat="' + cat + '">' + row[0] + '</button><div class="ov-cells">' + row[2].map(function(c){
           if(c.locked) return '<button type="button" class="ov-cell locked" data-cat="' + cat + '"><span class="ov-n">' + c.name + '</span><b>未解鎖</b></button>';
           return '<button type="button" class="ov-cell' + (c.full ? " full" : "") + '" data-cat="' + cat + '" data-target="' + c.id + '" style="--p:' + (c.max > 0 ? Math.min(100, c.val / c.max * 100) : 100) + '%"><span class="ov-n">' + c.name + '</span><b>' +
             (c.text != null ? c.text : c.val + '<i>/' + c.max + '</i>') + '</b></button>';
@@ -8826,7 +9120,13 @@
       const nb = document.getElementById("btnNameMore"); if(nb && !groupViewPopover) nb.classList.toggle("active", seCat === "info:groupAbbrev");
     }
     modalEl.addEventListener("click", function(e){
-      const c = e.target.closest && e.target.closest("[data-cat]"); if(!c || !c.closest("#seOv")) return;
+      const c = e.target.closest && e.target.closest("[data-cat]");
+      if(!c || !c.closest("#seOv")){
+        // 點到整行的空白處（文字、格子以外）也直接開啟對應的界面
+        const row = e.target.closest && e.target.closest("#seOv .ov-row[data-rowcat]");
+        if(row && row.dataset.rowcat !== seCat) seOpen(row.dataset.rowcat);
+        return;
+      }
       const cat = c.dataset.cat;
       if(cat.indexOf("info:") === 0){ closeNamePopover(); closeAttrPopover(); }   // 小視窗開著時先收回頁面，再由總覽開啟
       if(cat === seCat && c.classList.contains("ov-label")){ seClosePages(); return; }
@@ -9121,8 +9421,8 @@
     }
     // Saves the form's current state (skipped if unchanged since the last
     // save). The form is read right now, the write is queued.
-    function runAutoSave(){
-      if(!studentAutoSave || autosaveStudentDeleted) return autosaveChain;
+    function runAutoSave(force){
+      if((!studentAutoSave && !force) || autosaveStudentDeleted) return autosaveChain;
       const nameEl = document.getElementById("f_name");
       if(!nameEl || !modalEl.isConnected) return autosaveChain; // window already gone
       const updated = collectStudentFromForm();
@@ -9185,7 +9485,12 @@
     }
     document.getElementById("revertStudent").addEventListener("click", async function(){
       if(!isFormDirty()) return;
-      if(!confirm("要把所有修改還原成開啟視窗時的狀態嗎？")) return;
+      const okRevert = await askDialog({
+        title: "還原修改", message: "要把所有修改還原成開啟視窗時的狀態嗎？",
+        buttons: [{ label: "取消", value: false }, { label: "還原", value: true, kind: "danger" }],
+        cancelValue: false, focusIndex: 0
+      });
+      if(!okRevert) return;
       if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer = null; }
       await autosaveChain;
       // 自動儲存已經寫進資料庫的修改也要一併還原
@@ -9243,7 +9548,22 @@
     modalBeforeClose = function(){
       flushAutoSave();
       // 沒開自動儲存時，關閉前若還有沒存的修改就先問一次
-      if(!studentAutoSave && !skipDirtyPrompt && isFormDirty()) return confirm(UNSAVED_MSG);
+      if(!studentAutoSave && !skipDirtyPrompt && isFormDirty()){
+        return askDialog({
+          title: "尚有未儲存的修改",
+          message: "要儲存這些修改嗎？",
+          buttons: [
+            { label: "取消", value: "cancel" },
+            { label: "不儲存", value: "discard", kind: "danger" },
+            { label: "儲存", value: "save", kind: "primary" }
+          ],
+          cancelValue: "cancel", focusIndex: 2
+        }).then(function(v){
+          if(v === "discard") return true;
+          if(v === "save") document.getElementById("confirmStudent").click();   // 走原本的儲存流程，成功後會自己關閉
+          return false;
+        });
+      }
       return true;
     };
     document.getElementById("chkAutoSave").addEventListener("change", function(){
@@ -9260,7 +9580,23 @@
     let navBusy = false;
     async function navigateToStudent(target){
       if(navBusy) return;
-      if(!studentAutoSave && !skipDirtyPrompt && isFormDirty() && !confirm("尚有未儲存的修改，切換角色會放棄這些修改，確定嗎？")) return;
+      if(!studentAutoSave && !skipDirtyPrompt && isFormDirty()){
+        const v = await askDialog({
+          title: "尚有未儲存的修改",
+          message: "切換角色前要先儲存嗎？",
+          buttons: [
+            { label: "取消", value: "cancel" },
+            { label: "不儲存", value: "discard", kind: "danger" },
+            { label: "儲存並切換", value: "save", kind: "primary" }
+          ],
+          cancelValue: "cancel", focusIndex: 2
+        });
+        if(v === "cancel" || !v) return;
+        if(v === "save"){
+          if(!collectStudentFromForm()){ showToast("請先輸入名字才能儲存"); return; }
+          await runAutoSave(true);
+        }
+      }
       navBusy = true;
       flushAutoSave();
       const cb = modalOnClose;
@@ -9273,15 +9609,29 @@
 
     if(!isNew){
       document.getElementById("deleteStudentBtn").addEventListener("click", async function(){
-        if(!st.borrowed && !confirm('確定要刪除「' + st.name + '」嗎？')) return;
+        if(!st.borrowed){
+          const go = await askDialog({
+            title: "刪除學生",
+            message: "確定要刪除「" + st.name + "」嗎？\n刪除後可以在「最近刪除」還原（保留 " + TRASH_KEEP_DAYS + " 天）。",
+            buttons: [{ label: "取消", value: false }, { label: "刪除", value: true, kind: "danger" }],
+            cancelValue: false, focusIndex: 0
+          });
+          if(!go) return;
+        }
         autosaveStudentDeleted = true;
         if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer = null; }
         await autosaveChain;
+        // 存下最新的資料（含剛剛自動儲存的修改）放進最近刪除
+        let snap = null;
+        try{ snap = (await getAllStudents()).find(function(x){ return x.id === st.id; }) || null; }catch(err){}
+        const entry = { id: uid(), type: "student", name: st.name, deletedAt: Date.now(), student: snap || st };
+        if(!(await moveToTrash(entry))){ autosaveStudentDeleted = false; return; }
         await deleteStudent(st.id);
         await cleanupEmptyVariantGroup(originalBaseName, originalGroupId);
         skipDirtyPrompt = true;
         closeModal();
         await renderMain();
+        showUndoToast("已刪除「" + st.name + "」", function(){ return restoreFromTrash(entry); });
       });
     }
 
@@ -12546,11 +12896,25 @@
       let data;
       try{ data = await parseBackupBuffer(e.target.result); }
       catch(err){ alert(err.message); return; }
-      const mode = confirm(
-        "選擇「確定」= 合併匯入（保留現有資料，新增/更新匯入的內容）\n選擇「取消」= 完全取代（先清空現有資料，再匯入）"
-      ) ? "merge" : "replace";
+      const mode = await askDialog({
+        title: "匯入備份",
+        message: "合併匯入：保留現有資料，新增或更新備份裡的內容。\n完全取代：先清空現有資料，再以備份檔取代。",
+        buttons: [
+          { label: "取消", value: null },
+          { label: "完全取代", value: "replace", kind: "danger" },
+          { label: "合併匯入", value: "merge", kind: "primary" }
+        ],
+        cancelValue: null, focusIndex: 2
+      });
+      if(!mode) return;
       if(mode === "replace"){
-        if(!confirm("即將清空目前所有資料並以備份檔取代，確定繼續？")) return;
+        const sure = await askDialog({
+          title: "完全取代",
+          message: "即將清空目前所有資料，並以備份檔取代。\n這個動作無法復原，確定繼續嗎？",
+          buttons: [{ label: "取消", value: false }, { label: "清空並匯入", value: true, kind: "danger" }],
+          cancelValue: false, focusIndex: 0
+        });
+        if(!sure) return;
       }
       await applyBackupData(data, mode);
       alert("匯入完成。");
@@ -13130,6 +13494,7 @@
   });
   document.getElementById("btnAbbrevList").addEventListener("click", openAbbrevListModal);
   document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
+  document.getElementById("btnTrash").addEventListener("click", openTrashModal);
 
   // ----- Mobile top bar: hamburger menu (匯出/匯入/簡寫清單/通用設定) and
   // search toggle. Purely presentational — reuses the same .actions /
@@ -13249,6 +13614,7 @@
     await refreshCounts();
     switchSidebarTab(sidebarTab);
     updateAbbrevNotifDot();
+    trashPurgeOld().catch(function(){});
     syncCheckRemote(true);      // 開啟網頁時檢查一次雲端有沒有新版本
   })();
   document.addEventListener("visibilitychange", function(){
