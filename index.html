@@ -160,6 +160,9 @@
   .ui-dialog-backdrop{ position:fixed; inset:0; z-index:120; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(20,26,45,.5); animation:overlayFadeIn .15s ease both; }
   .ui-dialog{ background:var(--panel); color:var(--ink); border:1px solid var(--border); border-radius:14px; width:100%; max-width:390px; padding:20px 22px 16px; box-shadow:0 16px 40px rgba(15,20,35,.35); }
   body.corner-sharp .ui-dialog{ border-radius:4px !important; }
+  /* 寬度依最長一行自動調整（上限 600px），避免短短幾個字就被硬折行 */
+  .ui-dialog.ui-dialog-fit{ width:max-content; min-width:min(100%, 300px); max-width:min(100%, 600px); }
+  .ui-dialog.ui-dialog-fit .ui-dialog-msg{ max-height:60vh; overflow-y:auto; }
   .ui-dialog h3{ margin:0 0 8px; font-size:16px; }
   .ui-dialog-msg{ font-size:13px; line-height:1.65; margin-bottom:16px; }
   .ui-dialog-actions{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
@@ -248,6 +251,44 @@
   }
   body.title-icon-blackbg .title-icon-img{ background:#000; }
   .topbar .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  /* 備份與匯出頁：每列左側有圖示格子（只有外框線），按鈕與列高一律相同 */
+  .bkp-label{ display:flex; align-items:center; gap:10px; }
+  .bkp-ic{ flex:none; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--ink); }
+  .bkp-ic svg{ width:16px; height:16px; display:block; }
+  body.corner-sharp .bkp-ic{ border-radius:3px !important; }
+  .bkp-btn{ display:inline-flex; align-items:center; gap:5px; }
+  .bkp-btn svg{ width:13px; height:13px; flex:none; }
+  .trash-dialog{ max-width:440px; }
+  .ui-dialog-body{ display:flex; flex-direction:column; gap:8px; margin:-6px 0 14px; }
+  .ui-dialog-body .row{ display:flex; align-items:center; gap:8px; }
+  .ui-dialog-body select, .ui-dialog-body input{ min-width:0; }
+  /* ---- 批量編輯 ---- */
+  .avatar-card .batch-check{ display:none; position:absolute; top:5px; left:50%; transform:translateX(-50%); width:22px; height:22px; border-radius:50%; background:var(--accent); color:#fff; font-size:13px; font-weight:800; align-items:center; justify-content:center; z-index:2; box-shadow:0 1px 4px rgba(0,0,0,.3); }
+  .avatar-card.batch-sel{ box-shadow:inset 0 0 0 3px var(--accent); }
+  .avatar-card.batch-sel .batch-check{ display:flex; }
+  body.batch-on #mainScroll{ padding-bottom:96px; }
+  .batch-bar{ position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:60; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; max-width:calc(100vw - 24px); padding:8px 10px; background:var(--panel); border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 30px rgba(15,20,35,.28); }
+  .batch-bar[hidden]{ display:none; }
+  body.corner-sharp .batch-bar{ border-radius:4px !important; }
+  .batch-count{ font-size:13px; font-weight:800; padding:0 6px; white-space:nowrap; }
+  .batch-sep{ width:1px; height:20px; background:var(--border); margin:0 2px; }
+  /* ---- 卡片上的好感度 ±1 ---- */
+  .avatar-card .aff-step{ position:absolute; bottom:3px; z-index:3; width:22px; height:22px; padding:0; border:none; border-radius:50%; background:rgba(28,37,65,.78); color:#fff; font-size:15px; font-weight:800; line-height:22px; text-align:center; cursor:pointer; opacity:0; pointer-events:none; transition:opacity .12s; }
+  body.hide-quick-aff .avatar-card .aff-step{ display:none !important; }
+  body.hide-batch-btn #btnEnterBatch{ display:none !important; }
+  .dbg-status{ display:none; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:var(--ink-soft); }
+  .dbg-status.on{ display:flex; }
+  .dbg-status .dbg-spin{ width:14px; height:14px; flex:none; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:dbgSpin .8s linear infinite; }
+  @keyframes dbgSpin{ to{ transform:rotate(360deg); } }
+  .avatar-card .aff-minus{ left:3px; }
+  .avatar-card .aff-plus{ right:3px; }
+  .avatar-card.aff-quick:hover .aff-step, .avatar-card.aff-quick:focus-within .aff-step{ opacity:1; pointer-events:auto; }
+  .avatar-card .aff-step:hover{ background:var(--accent); }
+  @media (hover:none){ .avatar-card.aff-quick .aff-step{ opacity:1; pointer-events:auto; } }
+  body.density-compact .avatar-card .aff-step{ width:18px; height:18px; line-height:18px; font-size:13px; }
+  .trash-sub{ font-size:12px; color:var(--ink-soft); margin-bottom:8px; }
+  .trash-list{ max-height:50vh; overflow-y:auto; margin-bottom:12px; }
+  .trash-foot{ justify-content:space-between; }
   .mobile-only-btn{ display:none; }
   .mobile-icon-btn{ padding:8px 10px; font-size:16px; line-height:1; }
 
@@ -1538,10 +1579,7 @@
     <div class="search-box"><input type="text" id="searchInput" placeholder="搜尋學生名字..."></div>
     <button type="button" class="btn btn-ghost mobile-only-btn mobile-icon-btn" id="btnMobileMenuToggle" aria-label="更多選項" title="更多選項">☰</button>
     <div class="actions">
-      <button class="btn" id="btnExport">匯出備份</button>
-      <button class="btn" id="btnImport">匯入備份</button>
       <button class="btn btn-with-dot" id="btnAbbrevList">簡寫清單<span class="notif-dot" id="abbrevNotifDot"></span></button>
-      <button class="btn" id="btnTrash">最近刪除</button>
       <button class="btn" id="btnSettings">通用設定</button>
       <input type="file" id="importFileInput" accept=".json,.gz,application/json,application/gzip">
     </div>
@@ -1593,6 +1631,7 @@
           <div class="control-group" id="normalControls">
             <button class="btn btn-ghost btn-sm" id="btnEditSchool">編輯學校</button>
             <button class="btn btn-primary btn-sm" id="btnAddStudent">+ 新增學生</button>
+            <button class="btn btn-ghost btn-sm" id="btnEnterBatch">批量編輯</button>
             <button class="btn btn-ghost btn-sm" id="btnEnterOutput">輸出模式</button>
           </div>
           <div class="control-group" id="outputControls" style="display:none;">
@@ -1685,6 +1724,10 @@
   async function getAllStudents(){
     const t = tx(["students"], "readonly");
     return reqToPromise(t.objectStore("students").getAll());
+  }
+  async function getStudentById(id){
+    const t = tx(["students"], "readonly");
+    return reqToPromise(t.objectStore("students").get(id));
   }
   async function getStudentsBySchool(schoolId){
     const all = await getAllStudents();
@@ -1913,6 +1956,8 @@
     rippleBrightness: 100,
     rippleScale: 50,
     affinityLockIcon: true,
+    quickAffBtn: true,           // 卡片上的快捷好感度 +/- 按鈕（好感度顯示模式）
+    batchEditBtn: true,          // 主畫面的「批量編輯」按鈕
     schoolIconBlackBg: false,
     exportFormat: "gzip",
     avatarUploadWebp: true,      // 上傳卡片圖片時自動轉成 WebP（瀏覽器不支援輸出 WebP 時沿用原格式）
@@ -2018,6 +2063,8 @@
     titleIconBlackBg: { label: "標題圖示黑色背景", bool: ["關閉", "開啟"] },
     titleClickAction: { label: "標題點擊行為", map: { allStudents: "回到所有學生", schoolPicker: "回到選擇學校畫面", none: "不做任何事" } },
     affinityLockIcon: { label: "好感度封頂顯示", bool: ["普通愛心", "鎖頭樣式"] },
+    quickAffBtn: { label: "快捷好感度按鈕", bool: ["關閉", "開啟"] },
+    batchEditBtn: { label: "批量編輯按鈕", bool: ["關閉", "開啟"] },
     cardNameBgColor: { label: "卡片名條底色" },
     cardNameTextColor: { label: "卡片名條文字顏色" },
     attributePosterTextGlow: { label: "屬性海報文字黑底", bool: ["關閉", "開啟"] },
@@ -2360,6 +2407,8 @@
     document.body.classList.toggle("reduce-motion", !!s.reduceMotion);
     MOTION_ITEMS.forEach(function(it){ document.body.classList.toggle("motion-off-" + it.id, s[it.key] === false); });
     document.body.classList.toggle("school-icon-blackbg", !!s.schoolIconBlackBg);
+    document.body.classList.toggle("hide-quick-aff", s.quickAffBtn === false);
+    document.body.classList.toggle("hide-batch-btn", s.batchEditBtn === false);
     document.body.classList.toggle("density-compact", s.density === "compact");
     document.body.classList.toggle("density-spacious", s.density === "spacious");
     document.body.classList.toggle("corner-sharp", s.cornerStyle === "sharp");
@@ -3732,10 +3781,12 @@
     const editBtn = document.getElementById("btnEditSchool");
     const addBtn = document.getElementById("btnAddStudent");
     const enterOutputBtn = document.getElementById("btnEnterOutput");
-    const anyVisible = !outputMode && (showEdit || showAdd || showOutput);
-    if(editBtn) editBtn.style.display = (!outputMode && showEdit) ? "inline-block" : "none";
-    if(addBtn) addBtn.style.display = (!outputMode && showAdd) ? "inline-block" : "none";
-    if(enterOutputBtn) enterOutputBtn.style.display = (!outputMode && showOutput) ? "inline-block" : "none";
+    const anyVisible = !outputMode && !batchMode && (showEdit || showAdd || showOutput);
+    const enterBatchBtn = document.getElementById("btnEnterBatch");
+    if(editBtn) editBtn.style.display = (!outputMode && !batchMode && showEdit) ? "inline-block" : "none";
+    if(addBtn) addBtn.style.display = (!outputMode && !batchMode && showAdd) ? "inline-block" : "none";
+    if(enterOutputBtn) enterOutputBtn.style.display = (!outputMode && !batchMode && showOutput) ? "inline-block" : "none";
+    if(enterBatchBtn) enterBatchBtn.style.display = (!outputMode && !batchMode && showOutput) ? "inline-block" : "none";
     if(group) group.style.display = anyVisible ? "flex" : "none";
   }
 
@@ -4252,17 +4303,7 @@
       ? '<img src="' + studentAvatar(st) + '" alt="' + escapeHtml(fullNm) + '" draggable="false">'
       : '<div class="ph">' + escapeHtml((view.name||"?").slice(0,1)) + '</div>';
     let nameTagText = cardDisplayMode === "affinity"
-      ? (function(){
-          const affMax = computeAffinityMax(st.weaponStar);
-          const affVisual = computeAffinityFill(st.affinity, affMax, affinityFillMode);
-          const roundedPct = Math.round(affVisual.pct);
-          const isLocked = affVisual.capped && affMax !== 100 && appSettings.affinityLockIcon;
-          const affIcon = isLocked
-            ? affinityLockHeartSvg(roundedPct)
-            : affinityHeartSvg(roundedPct);
-          const affNum = String(st.affinity ?? 0);
-          return affIcon + " " + (isLocked ? '<span class="affinity-lock-num">' + affNum + '</span>' : affNum);
-        })()
+      ? cardAffinityTagHtml(st)
       : cardDisplayMode === "attribute"
         ? (function(){
             const attrObj = st.attribute ? ATTRIBUTES.find(function(a){ return a.id === st.attribute; }) : null;
@@ -4317,7 +4358,22 @@
       ((borrowedCard || !cardBadges.level) ? '' : '<span class="badge-level' + (hasAbbrevWarn ? " has-warn" : "") + '">Lv.' + (st.level ?? 1) + '</span>') +
       (borrowedCard ? (cardBadges.borrowed ? '<span class="badge-borrowed">借用</span>' : '') : ((st.weaponStar && cardBadges.star) ? '<span class="badge-star">' + starLabelText(st.weaponStar) + '</span>' : '')) +
       (hasAbbrevWarn ? '<span class="abbrev-warn-dot" title="簡寫意義尚未選擇"></span>' : '') +
-      '<span class="name-tag">' + nameTagText + '</span>';
+      '<span class="name-tag">' + nameTagText + '</span>' +
+      ((batchMode && !borrowedCard) ? '<span class="batch-check" aria-hidden="true">✓</span>' : '');
+
+    if(cardDisplayMode === "affinity" && appSettings.quickAffBtn !== false && !borrowedCard && !outputMode && !batchMode){
+      card.classList.add("aff-quick");
+      card.insertAdjacentHTML("beforeend",
+        '<button type="button" class="aff-step aff-minus" aria-label="好感度 −1" title="好感度 −1">−</button>' +
+        '<button type="button" class="aff-step aff-plus" aria-label="好感度 +1" title="好感度 +1">+</button>');
+      card.querySelectorAll(".aff-step").forEach(function(b){
+        b.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+        b.addEventListener("click", function(e){
+          e.stopPropagation(); e.preventDefault();
+          quickAdjustAffinity(st, card, b.classList.contains("aff-plus") ? 1 : -1);
+        });
+      });
+    }
 
     if(outputMode){
       const selIdx = selectedIds.indexOf(st.id);
@@ -4333,6 +4389,13 @@
       if(opts.reorderable){
         card.classList.add("reorderable");
         makeStudentCardDraggable(card);
+      }
+    } else if(batchMode){
+      if(borrowedCard){
+        card.addEventListener("click", function(){ showToast("借用學生沒有資料，無法批量編輯"); });
+      } else {
+        if(batchIds.has(st.id)) card.classList.add("batch-sel");
+        card.addEventListener("click", function(){ batchToggle(st.id, card); });
       }
     } else {
       card.addEventListener("click", async function(){
@@ -4488,6 +4551,265 @@
   }
 
 
+
+  // ---------- 卡片上的好感度 ±1 ----------
+  function cardAffinityTagHtml(st){
+    const affMax = computeAffinityMax(st.weaponStar);
+    const affVisual = computeAffinityFill(st.affinity, affMax, affinityFillMode);
+    const roundedPct = Math.round(affVisual.pct);
+    const isLocked = affVisual.capped && affMax !== 100 && appSettings.affinityLockIcon;
+    const affIcon = isLocked ? affinityLockHeartSvg(roundedPct) : affinityHeartSvg(roundedPct);
+    const affNum = String(st.affinity ?? 0);
+    return affIcon + " " + (isLocked ? '<span class="affinity-lock-num">' + affNum + '</span>' : affNum);
+  }
+  let quickAffChain = Promise.resolve();
+  function quickAdjustAffinity(st, card, delta){
+    // 排隊依序執行：連按幾下也不會互相覆蓋
+    quickAffChain = quickAffChain.then(async function(){
+      const cur = await getStudentById(st.id);
+      if(!cur) return;
+      const max = computeAffinityMax(cur.weaponStar || 0);
+      const base = cur.affinity == null ? 0 : cur.affinity;
+      const next = Math.min(max, Math.max(1, base + delta));
+      if(next === base){ showToast(delta > 0 ? "好感度已達上限 " + max : "好感度已是最低 1", 1200); return; }
+      cur.affinity = next;
+      await putStudent(cur);
+      st.affinity = next;   // 卡片點開編輯視窗時用的是這份資料，要同步
+      const tag = card.querySelector(".name-tag");
+      if(tag && card.isConnected) tag.innerHTML = cardAffinityTagHtml(cur);
+    }).catch(function(){ showToast("調整好感度失敗"); });
+  }
+
+  // ---------- 批量編輯 ----------
+  let batchMode = false;
+  const batchIds = new Set();
+  function ensureBatchBar(){
+    let bar = document.getElementById("batchBar");
+    if(bar) return bar;
+    bar = document.createElement("div");
+    bar.id = "batchBar"; bar.className = "batch-bar"; bar.hidden = true;
+    bar.setAttribute("role", "toolbar"); bar.setAttribute("aria-label", "批量編輯");
+    bar.innerHTML =
+      '<span class="batch-count" id="batchCount">已選 0 位</span>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-b="all">全選</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-b="none" data-needsel>清除</button>' +
+      '<span class="batch-sep"></span>' +
+      '<button type="button" class="btn btn-sm" data-b="aff" data-needsel>好感度</button>' +
+      '<button type="button" class="btn btn-sm" data-b="star" data-needsel>星數</button>' +
+      '<button type="button" class="btn btn-sm" data-b="school" data-needsel>學校</button>' +
+      '<button type="button" class="btn btn-danger btn-sm" data-b="del" data-needsel>刪除</button>' +
+      '<span class="batch-sep"></span>' +
+      '<button type="button" class="btn btn-primary btn-sm" data-b="done">完成</button>';
+    document.body.appendChild(bar);
+    bar.addEventListener("click", function(e){
+      const b = e.target.closest && e.target.closest("button[data-b]");
+      if(b && !b.disabled) batchAction(b.getAttribute("data-b"));
+    });
+    return bar;
+  }
+  function updateBatchBar(){
+    const bar = ensureBatchBar(), n = batchIds.size;
+    bar.querySelector("#batchCount").textContent = "已選 " + n + " 位";
+    bar.querySelectorAll("[data-needsel]").forEach(function(b){ b.disabled = n === 0; });
+  }
+  function refreshBatchCards(){
+    document.querySelectorAll("#studentGrid .avatar-card[data-student-id]").forEach(function(c){
+      c.classList.toggle("batch-sel", batchIds.has(c.dataset.studentId));
+    });
+  }
+  function batchToggle(id, card){
+    if(batchIds.has(id)) batchIds.delete(id); else batchIds.add(id);
+    if(card) card.classList.toggle("batch-sel", batchIds.has(id));
+    updateBatchBar();
+  }
+  async function enterBatchMode(){
+    if(batchMode || outputMode) return;
+    batchMode = true;
+    document.body.classList.add("batch-on");
+    ensureBatchBar().hidden = false;
+    updateBatchBar();
+    setNormalControlsVisible(lastNormalControlsState.showEdit, lastNormalControlsState.showAdd, lastNormalControlsState.showOutput);
+    await renderMain();
+  }
+  async function exitBatchMode(){
+    if(!batchMode) return;
+    batchMode = false;
+    batchIds.clear();
+    document.body.classList.remove("batch-on");
+    ensureBatchBar().hidden = true;
+    setNormalControlsVisible(lastNormalControlsState.showEdit, lastNormalControlsState.showAdd, lastNormalControlsState.showOutput);
+    await renderMain();
+  }
+  async function batchLoadTargets(){
+    return (await getAllStudents()).filter(function(s){ return batchIds.has(s.id) && !s.borrowed; });
+  }
+  // 逐位套用修改並存檔；成功後顯示可復原的提示
+  async function batchCommit(targets, mutate, label){
+    const originals = [];
+    let capped = 0;
+    for(const st of targets){
+      const orig = Object.assign({}, st);
+      const r = mutate(st);
+      if(r && r.changed){ await putStudent(st); originals.push(orig); if(r.capped) capped++; }
+    }
+    if(!originals.length){ showToast("沒有需要變更的項目（數值本來就一樣）"); return; }
+    await refreshCounts();
+    await renderMain();
+    showUndoToast(label + "：已更新 " + originals.length + " 位" + (capped ? "（" + capped + " 位已調整到上限）" : ""), async function(){
+      for(const o of originals) await putStudent(o);
+      await refreshCounts();
+      await renderMain();
+    });
+  }
+  async function batchAction(key){
+    if(key === "done"){ await exitBatchMode(); return; }
+    if(key === "all"){
+      currentGridStudents.forEach(function(s){ if(!s.borrowed) batchIds.add(s.id); });
+      refreshBatchCards(); updateBatchBar(); return;
+    }
+    if(key === "none"){ batchIds.clear(); refreshBatchCards(); updateBatchBar(); return; }
+    const targets = await batchLoadTargets();
+    if(!targets.length){ showToast("沒有可編輯的學生"); return; }
+    const n = targets.length;
+
+    if(key === "aff"){
+      const o = {
+        title: "批量設定好感度",
+        message: "套用到已選的 " + n + " 位學生。\n超過各自星數上限時，會自動調整到上限。",
+        bodyHtml: '<div class="row"><select id="bdMode" class="view-select"><option value="set">設為</option><option value="add">增加</option><option value="sub">減少</option></select>' +
+                  '<input id="bdNum" type="number" class="view-select" min="1" max="100" step="1" inputmode="numeric" placeholder="1–100" style="width:96px"></div>',
+        buttons: [{ label: "取消", value: false }, { label: "套用", value: true, kind: "primary" }],
+        cancelValue: false, focusSelector: "#bdNum",
+        collect: function(root){ return { mode: root.querySelector("#bdMode").value, num: parseInt(root.querySelector("#bdNum").value, 10) }; }
+      };
+      if(!(await askDialog(o))) return;
+      const mode = o.result.mode, num = o.result.num;
+      if(!Number.isInteger(num) || num < 1 || num > 100){ showToast("請輸入 1–100 的數字"); return; }
+      await batchCommit(targets, function(st){
+        const max = computeAffinityMax(st.weaponStar || 0);
+        const cur = st.affinity == null ? 1 : st.affinity;
+        const raw = mode === "set" ? num : (mode === "add" ? cur + num : cur - num);
+        const v = Math.min(max, Math.max(1, raw));
+        if(v === st.affinity) return { changed: false };
+        st.affinity = v;
+        return { changed: true, capped: raw > max };
+      }, "好感度");
+      return;
+    }
+
+    if(key === "star"){
+      let opts = "";
+      for(let i = 1; i <= 9; i++) opts += '<option value="' + i + '"' + (i === 5 ? " selected" : "") + '>' + starLabelText(i) + '</option>';
+      const o = {
+        title: "批量設定星數",
+        message: "套用到已選的 " + n + " 位學生。\n星數降低後，超過新上限的好感度會自動調整到上限。",
+        bodyHtml: '<div class="row"><select id="bdStar" class="view-select">' + opts + '</select></div>',
+        buttons: [{ label: "取消", value: false }, { label: "套用", value: true, kind: "primary" }],
+        cancelValue: false, focusSelector: "#bdStar",
+        collect: function(root){ return { star: parseInt(root.querySelector("#bdStar").value, 10) }; }
+      };
+      if(!(await askDialog(o))) return;
+      const star = o.result.star;
+      await batchCommit(targets, function(st){
+        if(st.weaponStar === star) return { changed: false };
+        st.weaponStar = star;
+        const max = computeAffinityMax(star);
+        const capped = (st.affinity || 0) > max;
+        if(capped) st.affinity = max;
+        return { changed: true, capped: capped };
+      }, "星數");
+      return;
+    }
+
+    if(key === "school"){
+      if(!schools.length){ showToast("目前沒有學校"); return; }
+      const o = {
+        title: "批量更換學校",
+        message: "把已選的 " + n + " 位學生移到：",
+        bodyHtml: '<div class="row"><select id="bdSchool" class="view-select" style="max-width:100%">' +
+                  schools.map(function(sc){ return '<option value="' + escapeHtml(sc.id) + '">' + escapeHtml(sc.name) + '</option>'; }).join("") + '</select></div>',
+        buttons: [{ label: "取消", value: false }, { label: "移動", value: true, kind: "primary" }],
+        cancelValue: false, focusSelector: "#bdSchool",
+        collect: function(root){ return { schoolId: root.querySelector("#bdSchool").value }; }
+      };
+      if(!(await askDialog(o))) return;
+      const sid = o.result.schoolId;
+      await batchCommit(targets, function(st){
+        if(st.schoolId === sid) return { changed: false };
+        st.schoolId = sid;
+        return { changed: true };
+      }, "學校");
+      return;
+    }
+
+    if(key === "del"){
+      const names = targets.map(function(s){ return s.name || "（未命名）"; });
+      const listText = names.slice(0, 5).join("、") + (names.length > 5 ? "…" : "");
+      const go = await askDialog({
+        title: "批量刪除",
+        message: "確定要刪除已選的 " + n + " 位學生嗎？\n" + listText + "\n刪除後可在「通用設定 → 備份與匯出 → 最近刪除」還原（保留 " + TRASH_KEEP_DAYS + " 天）。",
+        buttons: [{ label: "取消", value: false }, { label: "刪除 " + n + " 位", value: true, kind: "danger" }],
+        cancelValue: false, focusIndex: 0
+      });
+      if(!go) return;
+      const entry = { id: uid(), type: "students", name: names.slice(0, 3).join("、") + (names.length > 3 ? " 等 " + n + " 位" : ""), deletedAt: Date.now(), students: targets };
+      if(!(await moveToTrash(entry))) return;
+      for(const st of targets){ await deleteStudent(st.id); batchIds.delete(st.id); }
+      updateBatchBar();
+      await refreshCounts();
+      await renderMain();
+      showUndoToast("已刪除 " + n + " 位學生", function(){ return restoreFromTrash(entry); });
+    }
+  }
+  document.addEventListener("keydown", function(e){
+    if(e.key !== "Escape" || !batchMode) return;
+    if(overlay.style.display === "flex" || document.querySelector(".ui-dialog-backdrop")) return;
+    exitBatchMode();
+  });
+
+  // ---------- 匯入／拉取前：比對備份和本機的差異 ----------
+  function backupCanonStudent(st){
+    const o = Object.assign({}, st); delete o.avatar; delete o.avatar2;   // 圖片匯出時可能被轉檔，不拿來比
+    return JSON.stringify(syncCanon(o));
+  }
+  function backupCanonSchool(sc){
+    return JSON.stringify(syncCanon({ id: sc.id, name: sc.name, icon: sc.icon || null, iconBlackBg: !!sc.iconBlackBg }));
+  }
+  // 以「備份內容」為準：add＝只在備份有、del＝只在本機有、upd＝兩邊都有但內容不同
+  async function backupDiff(data){
+    const localStudents = (await getAllStudents()).filter(function(x){ return !x.borrowed; });
+    const localSchools = await getAllSchools();
+    const diffSet = function(inc, loc, canon){
+      const locMap = new Map(loc.map(function(x){ return [x.id, x]; }));
+      const incIds = new Set(inc.map(function(x){ return x.id; }));
+      const out = { add: [], upd: [], same: 0, del: [] };
+      const label = function(x){ return x.name || "（未命名）"; };
+      inc.forEach(function(x){
+        const l = locMap.get(x.id);
+        if(!l) out.add.push(label(x));
+        else if(canon(l) !== canon(x)) out.upd.push(label(x));
+        else out.same++;
+      });
+      loc.forEach(function(l){ if(!incIds.has(l.id)) out.del.push(label(l)); });
+      return out;
+    };
+    return {
+      students: diffSet(data.students, localStudents, backupCanonStudent),
+      schools: diffSet(data.schools, localSchools, backupCanonSchool),
+      localStudentCount: localStudents.length,
+      localSchoolCount: localSchools.length
+    };
+  }
+  function diffNames(arr, n){
+    n = n || 5;
+    return arr.slice(0, n).join("、") + (arr.length > n ? "…等 " + arr.length + " 位" : "");
+  }
+  function diffLine(label, d, withDel){
+    const parts = ["新增 " + d.add.length, "更新 " + d.upd.length, "不變 " + d.same];
+    if(withDel) parts.push("刪除 " + d.del.length);
+    return "　" + label + "：" + parts.join("、");
+  }
+
   // ---------- 自訂確認對話框（取代原生 confirm / alert，按鈕文字清楚、可有多個選項） ----------
   // buttons: [{ label, value, kind: "primary" | "danger" | undefined }]，由左到右顯示。
   // 按 Esc 或點背景 = 回傳 cancelValue。focusIndex 指定預設聚焦的按鈕（破壞性操作請放在取消上）。
@@ -4498,15 +4820,18 @@
       const prevFocus = document.activeElement;
       const back = document.createElement("div");
       back.className = "ui-dialog-backdrop";
-      back.innerHTML = '<div class="ui-dialog" role="alertdialog" aria-modal="true">' +
+      back.innerHTML = '<div class="ui-dialog' + (opts.fit ? ' ui-dialog-fit' : '') + '" role="alertdialog" aria-modal="true">' +
         (opts.title ? '<h3>' + escapeHtml(opts.title) + '</h3>' : '') +
         '<div class="ui-dialog-msg">' + escapeHtml(opts.message || "").replace(/\n/g, "<br>") + '</div>' +
+        (opts.bodyHtml ? '<div class="ui-dialog-body">' + opts.bodyHtml + '</div>' : '') +
         '<div class="ui-dialog-actions">' + buttons.map(function(b, i){
           const cls = b.kind === "primary" ? "btn-primary" : (b.kind === "danger" ? "btn-danger" : "btn-ghost");
           return '<button type="button" class="btn ' + cls + '" data-i="' + i + '">' + escapeHtml(b.label) + '</button>';
         }).join("") + '</div></div>';
       document.body.appendChild(back);
-      const btnEls = Array.prototype.slice.call(back.querySelectorAll("button"));
+      const btnEls = Array.prototype.slice.call(back.querySelectorAll(".ui-dialog-actions button"));
+      const focusables = Array.prototype.slice.call(back.querySelectorAll("input, select, button"));
+      const fi = opts.focusIndex != null ? opts.focusIndex : Math.max(0, buttons.map(function(b){ return b.kind; }).lastIndexOf("primary"));
       let done = false;
       function finish(v){
         if(done) return;
@@ -4520,21 +4845,27 @@
         if(e.key === "Escape"){
           e.preventDefault(); e.stopImmediatePropagation();
           finish(cancelValue);
-        } else if(e.key === "Tab" && btnEls.length){
-          const i = btnEls.indexOf(document.activeElement);
+        } else if(e.key === "Tab" && focusables.length){
+          const i = focusables.indexOf(document.activeElement);
           e.preventDefault();
-          btnEls[(Math.max(i, 0) + (e.shiftKey ? btnEls.length - 1 : 1)) % btnEls.length].focus();
+          focusables[(Math.max(i, 0) + (e.shiftKey ? focusables.length - 1 : 1)) % focusables.length].focus();
+        } else if(e.key === "Enter" && e.target && e.target.tagName === "INPUT" && btnEls[fi]){
+          e.preventDefault();
+          btnEls[fi].click();
         }
       }
       document.addEventListener("keydown", onKey, true);
       btnEls.forEach(function(b){
-        b.addEventListener("click", function(){ finish(buttons[+b.getAttribute("data-i")].value); });
+        b.addEventListener("click", function(){
+          if(typeof opts.collect === "function") opts.result = opts.collect(back);   // 讀取表單欄位（呼叫端從 opts.result 取）
+          finish(buttons[+b.getAttribute("data-i")].value);
+        });
       });
       let pressOnBack = false;
       back.addEventListener("pointerdown", function(e){ pressOnBack = (e.target === back); });
       back.addEventListener("click", function(e){ if(pressOnBack && e.target === back) finish(cancelValue); pressOnBack = false; });
-      const fi = opts.focusIndex != null ? opts.focusIndex : Math.max(0, buttons.map(function(b){ return b.kind; }).lastIndexOf("primary"));
-      if(btnEls[fi]) btnEls[fi].focus();
+      const fe = opts.focusSelector ? back.querySelector(opts.focusSelector) : null;
+      if(fe) fe.focus(); else if(btnEls[fi]) btnEls[fi].focus();
     });
   }
 
@@ -4618,6 +4949,14 @@
         if(other){ showToast("已有借用學生「" + other.name + "」，無法還原"); return false; }
       }
       await putStudent(st);
+    } else if(item.type === "students"){
+      const sc = await getAllSchools();
+      const list = item.students || [];
+      if(list.some(function(x){ return x.schoolId && !sc.some(function(y){ return y.id === x.schoolId; }); })){
+        showToast("部分學生原本的學校已被刪除，請先還原該學校");
+        return false;
+      }
+      for(const x of list) await putStudent(x);
     } else {
       await putSchool(item.school);
       for(let i = 0; i < (item.students || []).length; i++) await putStudent(item.students[i]);
@@ -4642,22 +4981,40 @@
     try{ items = await trashTx("readonly", function(st){ return st.getAll(); }); }
     catch(err){ showToast("無法讀取「最近刪除」"); return; }
     items = (items || []).sort(function(a, b){ return b.deletedAt - a.deletedAt; });
-    showModal(
+    // 獨立的一層（跟 askDialog 一樣），不動主視窗，所以可以直接疊在「通用設定」上面
+    const back = document.createElement("div");
+    back.className = "ui-dialog-backdrop";
+    back.innerHTML = '<div class="ui-dialog trash-dialog" role="dialog" aria-modal="true" aria-label="最近刪除">' +
       '<h3>最近刪除</h3>' +
-      '<div class="modal-sub">刪除的學生與學校會保留 ' + TRASH_KEEP_DAYS + ' 天，期限過後自動清除</div>' +
-      '<div id="trashList"></div>' +
-      '<div class="modal-actions"><button class="btn btn-danger" id="trashEmptyBtn">清空</button>' +
-      '<div class="right"><button class="btn btn-ghost" id="trashCloseBtn">關閉</button></div></div>'
-    );
-    const listEl = document.getElementById("trashList");
-    const emptyBtn = document.getElementById("trashEmptyBtn");
+      '<div class="trash-sub">刪除的學生與學校會保留 ' + TRASH_KEEP_DAYS + ' 天，期限過後自動清除</div>' +
+      '<div class="trash-list"></div>' +
+      '<div class="ui-dialog-actions trash-foot"><button type="button" class="btn btn-danger" data-role="empty">清空</button>' +
+      '<button type="button" class="btn btn-ghost" data-role="close">關閉</button></div></div>';
+    document.body.appendChild(back);
+    const prevFocus = document.activeElement;
+    const listEl = back.querySelector(".trash-list");
+    const emptyBtn = back.querySelector('[data-role="empty"]');
+    function closeTrash(){
+      document.removeEventListener("keydown", onKey, true);
+      if(back.parentNode) back.parentNode.removeChild(back);
+      try{ if(prevFocus && prevFocus.focus) prevFocus.focus(); }catch(_){}
+    }
+    function onKey(e){
+      if(e.key !== "Escape") return;
+      const layers = document.querySelectorAll(".ui-dialog-backdrop");
+      if(layers[layers.length - 1] !== back) return;   // 上面還有確認視窗時，Esc 先交給它
+      e.preventDefault(); e.stopImmediatePropagation();
+      closeTrash();
+    }
+    document.addEventListener("keydown", onKey, true);
     function draw(){
       emptyBtn.disabled = !items.length;
       if(!items.length){ listEl.innerHTML = '<div class="trash-empty">沒有最近刪除的項目</div>'; return; }
       listEl.innerHTML = items.map(function(it){
         const left = Math.max(0, Math.ceil(TRASH_KEEP_DAYS - (Date.now() - it.deletedAt) / 86400000));
         const kind = it.type === "school" ? "學校" : "學生";
-        const extra = it.type === "school" ? "含 " + (it.students || []).length + " 位學生 · " : "";
+        const extra = it.type === "school" ? "含 " + (it.students || []).length + " 位學生 · "
+                    : (it.type === "students" ? "共 " + (it.students || []).length + " 位 · " : "");
         return '<div class="trash-row" data-id="' + escapeHtml(it.id) + '">' +
           '<div class="trash-info"><div class="trash-name">[' + kind + '] ' + escapeHtml(it.name) + '</div>' +
           '<div class="trash-meta">' + extra + trashAgeText(it.deletedAt) + ' · 剩 ' + left + ' 天</div></div>' +
@@ -4666,6 +5023,10 @@
       }).join("");
     }
     draw();
+    let pressOnBack = false;
+    back.addEventListener("pointerdown", function(e){ pressOnBack = (e.target === back); });
+    back.addEventListener("click", function(e){ if(pressOnBack && e.target === back) closeTrash(); pressOnBack = false; });
+    back.querySelector('[data-role="close"]').addEventListener("click", closeTrash);
     listEl.addEventListener("click", async function(e){
       const b = e.target.closest && e.target.closest("button[data-act]"); if(!b) return;
       const row = b.closest(".trash-row");
@@ -4699,7 +5060,7 @@
       catch(err){ showToast("清空失敗"); }
       draw();
     });
-    document.getElementById("trashCloseBtn").addEventListener("click", closeModal);
+    const cb = back.querySelector('[data-role="close"]'); if(cb) cb.focus();
   }
 
   function escapeHtml(str){
@@ -5469,6 +5830,14 @@
             '</div>' +
           '</div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">好感度達到角色上限時，是否改用鎖頭圖示取代一般愛心。</div>' +
+          '<div class="field">' +
+            '<label>快捷好感度按鈕</label>' +
+            '<div class="theme-toggle-row">' +
+              '<button type="button" class="btn btn-sm theme-opt' + (draft.quickAffBtn !== false ? " active" : "") + '" id="st_quickAffOn">開啟</button>' +
+              '<button type="button" class="btn btn-sm theme-opt' + (draft.quickAffBtn === false ? " active" : "") + '" id="st_quickAffOff">關閉</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">卡片顯示為「好感度」時，卡片兩側的 −／+ 快捷按鈕。關閉後仍可在編輯視窗調整好感度。</div>' +
           '<div class="fieldset-title">卡片名條顏色</div>' +
           '<div class="field">' +
             '<label>名條底色</label>' +
@@ -5736,6 +6105,20 @@
     }
 
     imgTabSelect.addEventListener("change", function(){ activeImageTab = this.value; refreshImagePanel(); });
+
+    const quickAffOnBtn = root.querySelector("#st_quickAffOn");
+    const quickAffOffBtn = root.querySelector("#st_quickAffOff");
+    if(quickAffOnBtn && quickAffOffBtn){
+      [[quickAffOnBtn, true], [quickAffOffBtn, false]].forEach(function(pair){
+        pair[0].addEventListener("click", function(){
+          if((draft.quickAffBtn !== false) === pair[1]) return;
+          draft.quickAffBtn = pair[1];
+          quickAffOnBtn.classList.toggle("active", pair[1]);
+          quickAffOffBtn.classList.toggle("active", !pair[1]);
+          onChange();
+        });
+      });
+    }
 
     if(affLockOnBtn && affLockOffBtn){
       affLockOnBtn.addEventListener("click", function(){
@@ -6396,6 +6779,12 @@
             '<button type="button" class="btn btn-sm theme-opt' + (draft.filterPanelStyle === "simple" ? " active" : "") + '" id="st_filterSimple">簡化</button>' +
           '</div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">簡化：屬性與裝甲只顯示圖示。詳細：圖示加文字。</div>' +
+          '<div class="fieldset-title">批量編輯按鈕</div>' +
+          '<div class="theme-toggle-row">' +
+            '<button type="button" class="btn btn-sm theme-opt' + (draft.batchEditBtn !== false ? " active" : "") + '" id="st_batchBtnOn">開啟</button>' +
+            '<button type="button" class="btn btn-sm theme-opt' + (draft.batchEditBtn === false ? " active" : "") + '" id="st_batchBtnOff">關閉</button>' +
+          '</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">主畫面上方的「批量編輯」按鈕。關閉後就無法進入批量編輯模式。</div>' +
           '<div class="fieldset-title">視窗透明度</div>' +
           sliderField("st_modalOpacity", "編輯學生等視窗透明度", draft.modalOpacity, 40, 100) +
           '<div class="variant-group-note" style="margin-top:-6px;">調整編輯學生等彈出視窗的背景透明度，數值越低越透明。</div>' +
@@ -6452,6 +6841,7 @@
             '<button type="button" class="btn btn-sm" id="btnSyncTest">連線測試</button>' +
             '<button type="button" class="btn btn-sm" id="btnSyncPush">推送到雲端</button>' +
             '<button type="button" class="btn btn-sm" id="btnSyncPull">從雲端拉取</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSyncSquash" title="把雲端歷史壓成只剩最新一個版本（舊版本無法還原）">壓縮雲端歷史</button>' +
             '<button type="button" class="btn btn-sm" id="btnSyncClear">清除連線資料</button>' +
           '</div>' +
           '<div id="syncStatus" style="font-size:12.5px; color:var(--ink-soft); margin:6px 0 12px; white-space:pre-line;"></div>' +
@@ -6469,26 +6859,54 @@
             '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkAlways">永遠下載</button>' +
           '</div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">決定拉取（會取代這台資料）前要不要先下載本機備份。「僅學生資料不同」：差異只在學生編輯視窗的內容時不下載；學校、簡寫清單、群組有差異，或學生人數不同仍會下載。</div>' +
+          '<div class="fieldset-title">除錯功能</div>' +
+          '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
+            '<button type="button" class="btn btn-sm" id="btnHtmlRepoInfo" title="查看放這個網頁（HTML 檔）的 GitHub 倉庫目前多大、有幾筆歷史">網頁倉庫大小</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSyncRepoInfo" title="查看上面「同步用」的 GitHub 倉庫（存備份資料的那個）目前多大、有幾筆歷史">資料倉庫大小</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSyncDiffInfo" title="下載雲端的備份，和這台目前的資料比對，列出哪些學生、學校、簡寫表不同（只查看，不會改動任何資料）">本機與雲端差異</button>' +
+          '</div>' +
+          '<div class="dbg-status" id="dbgStatus" role="status" aria-live="polite"><span class="dbg-spin" aria-hidden="true"></span><span id="dbgStatusText"></span></div>' +
         '</div>' +
         '<div class="settings-page" data-page="backup" style="display:none">' +
-          '<div class="fieldset-title">匯出備份格式</div>' +
-          '<div class="field">' +
-            '<div class="theme-toggle-row">' +
-              '<button type="button" class="btn btn-sm theme-opt' + (draft.exportFormat !== "plain" ? " active" : "") + '" id="st_exportFmtGzip">壓縮（檔案較小）</button>' +
-              '<button type="button" class="btn btn-sm theme-opt' + (draft.exportFormat === "plain" ? " active" : "") + '" id="st_exportFmtPlain">純文字（可讀/可編輯）</button>' +
+          '<div class="setting-row">' +
+            '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><div class="fieldset-title">學生資料備份</div></div>' +
+            '<div class="field" style="display:flex; gap:6px;">' +
+              '<button type="button" class="btn btn-sm bkp-btn" id="btnDataExport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>匯出</button>' +
+              '<button type="button" class="btn btn-sm bkp-btn" id="btnDataImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>匯入</button>' +
             '</div>' +
           '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">壓縮格式檔案較小但無法直接開啟，純文字格式檔案較大但可直接編輯。</div>' +
-          '<div class="fieldset-title">設定備份</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">匯出所有設定與圖片（含背景圖片、各背景方案），不含學生資料與 token。匯入會取代目前設定並重新載入。</div>' +
-          '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
-            '<button type="button" class="btn btn-sm" id="btnSettingsExport">匯出設定</button>' +
-            '<button type="button" class="btn btn-sm" id="btnSettingsImport">匯入設定</button>' +
-            '<input type="file" id="settingsImportInput" accept=".gz,.json,application/json,application/gzip" hidden>' +
+          '<div class="variant-group-note">包含學生、學校與簡寫清單。匯入時可以選擇合併或完全取代。</div>' +
+          '<div class="setting-row">' +
+            '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span><div class="fieldset-title">備份檔格式</div></div>' +
+            '<div class="theme-toggle-row">' +
+              '<button type="button" class="btn btn-sm theme-opt' + (draft.exportFormat !== "plain" ? " active" : "") + '" id="st_exportFmtGzip">壓縮</button>' +
+              '<button type="button" class="btn btn-sm theme-opt' + (draft.exportFormat === "plain" ? " active" : "") + '" id="st_exportFmtPlain">純文字</button>' +
+            '</div>' +
           '</div>' +
-          '<div class="fieldset-title">除錯資料</div>' +
-          '<div class="field"><button type="button" class="btn btn-sm" id="btnExportDiag">匯出除錯資料</button></div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">遇到問題要回報時使用：匯出瀏覽器資訊、設定、資料庫內容和最近的錯誤記錄。不含任何圖片（卡片圖片、圖示、背景只記大小），檔案是可直接開啟的 JSON。</div>' +
+          '<div class="variant-group-note">壓縮檔案較小但無法直接開啟；純文字檔案較大，但可以直接閱讀和編輯。</div>' +
+          '<div class="setting-row">' +
+            '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><div class="fieldset-title">最近刪除</div></div>' +
+            '<div class="field" style="display:flex; gap:6px;">' +
+              '<button type="button" class="btn btn-sm bkp-btn" id="btnDataTrash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>查看</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="variant-group-note">刪除的學生與學校會保留 30 天，可以在這裡還原。</div>' +
+          '<div class="setting-row">' +
+            '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span><div class="fieldset-title">設定備份</div></div>' +
+            '<div class="field" style="display:flex; gap:6px;">' +
+              '<button type="button" class="btn btn-sm bkp-btn" id="btnSettingsExport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>匯出</button>' +
+              '<button type="button" class="btn btn-sm bkp-btn" id="btnSettingsImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>匯入</button>' +
+              '<input type="file" id="settingsImportInput" accept=".gz,.json,application/json,application/gzip" hidden>' +
+            '</div>' +
+          '</div>' +
+          '<div class="variant-group-note">匯出所有設定與圖片（含背景圖片、各背景方案），不含學生資料與 token。匯入會取代目前設定並重新載入。</div>' +
+          '<div class="setting-row">' +
+            '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg></span><div class="fieldset-title">除錯資料</div></div>' +
+            '<div class="field" style="display:flex; gap:6px;">' +
+              '<button type="button" class="btn btn-sm bkp-btn" id="btnExportDiag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>匯出</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="variant-group-note">遇到問題要回報時使用：匯出瀏覽器資訊、設定、資料庫內容和最近的錯誤記錄。不含任何圖片，檔案是可直接開啟的 JSON。</div>' +
         '</div>' +
         '<div class="settings-page" data-page="webp" style="display:none">' +
           '<div class="fieldset-title">卡片圖片上傳時轉成 <span style="text-transform:none">WebP</span></div>' +
@@ -6690,7 +7108,8 @@
         ["st_avUpWebpOn", "st_avUpWebpOff"],
         ["st_syncCheckOn", "st_syncCheckOff"],
         ["st_ovHideGroupOn", "st_ovHideGroupOff"],
-        ["st_ovHideAttrOn", "st_ovHideAttrOff"]
+        ["st_ovHideAttrOn", "st_ovHideAttrOff"],
+        ["st_batchBtnOn", "st_batchBtnOff"]
       ]).forEach(function(pair){
         const onBtn = document.getElementById(pair[0]);
         const offBtn = document.getElementById(pair[1]);
@@ -6874,6 +7293,11 @@
       d.addEventListener("toggle", function(){ advFoldSave(d.dataset.fold, d.open); });
     });
 
+    // 學生資料備份：匯出／匯入／最近刪除
+    document.getElementById("btnDataExport").addEventListener("click", function(){ exportBackup(); });
+    document.getElementById("btnDataImport").addEventListener("click", function(){ document.getElementById("importFileInput").click(); });
+    document.getElementById("btnDataTrash").addEventListener("click", function(){ openTrashModal(); });
+
     // 設定備份
     document.getElementById("btnSettingsExport").addEventListener("click", function(){ exportSettingsFile(); });
     (function(){
@@ -6889,7 +7313,7 @@
       const elToken = document.getElementById("st_syncToken");
       const elDevice = document.getElementById("st_syncDevice");
       const elStatus = document.getElementById("syncStatus");
-      const btnIds = ["btnSyncTest", "btnSyncPush", "btnSyncPull", "btnSyncClear"];
+      const btnIds = ["btnSyncTest", "btnSyncPush", "btnSyncPull", "btnSyncClear", "btnSyncSquash"];
       elRepo.value = cfg.repo; elToken.value = cfg.token; elDevice.value = cfg.device;
       elDevice.placeholder = "例如：" + syncDefaultDevice();
       elStatus.textContent = syncStatusIdle(cfg);
@@ -6950,6 +7374,32 @@
       });
       document.getElementById("btnSyncPush").addEventListener("click", function(){ run(syncPush); });
       document.getElementById("btnSyncPull").addEventListener("click", function(){ run(syncPull); });
+      document.getElementById("btnSyncSquash").addEventListener("click", function(){ run(syncSquash); });
+      // 除錯按鈕：執行中（含查詢與跳出的視窗）不重複觸發，兩顆共用同一把鎖，結束後才恢復
+      (function(){
+        var dbgBusy = false;
+        var dbgBtns = [document.getElementById("btnHtmlRepoInfo"), document.getElementById("btnSyncRepoInfo"), document.getElementById("btnSyncDiffInfo")];
+        var dbgBox = document.getElementById("dbgStatus");
+        var dbgTxt = document.getElementById("dbgStatusText");
+        function bindDbg(btn, fn, busyText){
+          btn.addEventListener("click", async function(){
+            if(dbgBusy) return;
+            dbgBusy = true;
+            dbgBtns.forEach(function(b){ b.disabled = true; });
+            if(dbgBox){ dbgTxt.textContent = busyText; dbgBox.classList.add("on"); }
+            try{ await fn(); }
+            catch(err){ showToast((err && err.message) || "無法取得倉庫資訊"); }
+            finally{
+              dbgBusy = false;
+              dbgBtns.forEach(function(b){ b.disabled = false; });
+              if(dbgBox) dbgBox.classList.remove("on");
+            }
+          });
+        }
+        bindDbg(dbgBtns[0], showHtmlRepoInfo, "作業中：正在查詢網頁倉庫大小…");
+        bindDbg(dbgBtns[1], showSyncRepoInfo, "作業中：正在查詢資料倉庫大小…");
+        bindDbg(dbgBtns[2], showSyncDiffInfo, "作業中：正在下載雲端備份並比對，請稍候…");
+      })();
       document.getElementById("btnSyncClear").addEventListener("click", function(){
         if(!window.confirm("要清除這台裝置上的雲端連線資料（repo、token、裝置名稱、同步記錄）嗎？\n\n學生資料與雲端的備份都不會被刪除。")) return;
         localStorage.removeItem(SYNC_KEY);
@@ -7185,6 +7635,19 @@
         this.classList.add("active");
         document.getElementById("st_modalTextBoostOn").classList.remove("active");
       }
+    });
+
+    // 批量編輯按鈕 顯示開關
+    [["batchEditBtn", "st_batchBtnOn", "st_batchBtnOff"]].forEach(function(cfg){
+      const key = cfg[0], onB = document.getElementById(cfg[1]), offB = document.getElementById(cfg[2]);
+      function setVal(v){
+        if((draft[key] !== false) === v) return;
+        draft[key] = v; markDirty(); applySettings(draft);
+        onB.classList.toggle("active", v);
+        offB.classList.toggle("active", !v);
+      }
+      onB.addEventListener("click", function(){ setVal(true); });
+      offB.addEventListener("click", function(){ setVal(false); });
     });
 
     document.getElementById("st_cardNameBgColor").addEventListener("input", function(){
@@ -7546,7 +8009,7 @@
       const kids = await getStudentsBySchool(school.id);
       const go = await askDialog({
         title: "刪除學校",
-        message: "確定要刪除「" + school.name + "」嗎？\n底下 " + kids.length + " 位學生也會一併刪除。\n刪除後可以在「最近刪除」還原（保留 " + TRASH_KEEP_DAYS + " 天）。",
+        message: "確定要刪除「" + school.name + "」嗎？\n底下 " + kids.length + " 位學生也會一併刪除。\n刪除後可在「通用設定 → 備份與匯出 → 最近刪除」還原（保留 " + TRASH_KEEP_DAYS + " 天）。",
         buttons: [{ label: "取消", value: false }, { label: "刪除", value: true, kind: "danger" }],
         cancelValue: false, focusIndex: 0
       });
@@ -9612,7 +10075,7 @@
         if(!st.borrowed){
           const go = await askDialog({
             title: "刪除學生",
-            message: "確定要刪除「" + st.name + "」嗎？\n刪除後可以在「最近刪除」還原（保留 " + TRASH_KEEP_DAYS + " 天）。",
+            message: "確定要刪除「" + st.name + "」嗎？\n刪除後可在「通用設定 → 備份與匯出 → 最近刪除」還原（保留 " + TRASH_KEEP_DAYS + " 天）。",
             buttons: [{ label: "取消", value: false }, { label: "刪除", value: true, kind: "danger" }],
             cancelValue: false, focusIndex: 0
           });
@@ -12896,9 +13359,17 @@
       let data;
       try{ data = await parseBackupBuffer(e.target.result); }
       catch(err){ alert(err.message); return; }
+      let diff = null, diffMsg = "合併匯入：保留現有資料，新增或更新備份裡的內容。\n完全取代：先清空現有資料，再以備份檔取代。";
+      try{
+        diff = await backupDiff(data);
+        diffMsg = "備份檔：" + data.students.length + " 位學生、" + data.schools.length + " 所學校\n" +
+          "本機現有：" + diff.localStudentCount + " 位學生、" + diff.localSchoolCount + " 所學校\n\n" +
+          "合併匯入（不會刪除任何資料）\n" + diffLine("學生", diff.students, false) + "\n" + diffLine("學校", diff.schools, false) + "\n\n" +
+          "完全取代（本機有、備份沒有的會被刪除）\n" + diffLine("學生", diff.students, true) + "\n" + diffLine("學校", diff.schools, true);
+      }catch(err){ diff = null; }
       const mode = await askDialog({
         title: "匯入備份",
-        message: "合併匯入：保留現有資料，新增或更新備份裡的內容。\n完全取代：先清空現有資料，再以備份檔取代。",
+        message: diffMsg,
         buttons: [
           { label: "取消", value: null },
           { label: "完全取代", value: "replace", kind: "danger" },
@@ -12910,7 +13381,10 @@
       if(mode === "replace"){
         const sure = await askDialog({
           title: "完全取代",
-          message: "即將清空目前所有資料，並以備份檔取代。\n這個動作無法復原，確定繼續嗎？",
+          message: "即將清空目前所有資料，並以備份檔取代。\n" +
+            (diff && diff.students.del.length ? "將被刪除的學生：" + diffNames(diff.students.del) + "\n" : "") +
+            (diff && diff.schools.del.length ? "將被刪除的學校：" + diffNames(diff.schools.del) + "\n" : "") +
+            "這個動作無法復原，確定繼續嗎？",
           buttons: [{ label: "取消", value: false }, { label: "清空並匯入", value: true, kind: "danger" }],
           cancelValue: false, focusIndex: 0
         });
@@ -13165,9 +13639,23 @@
     }
     const meta = await syncGetMeta(cfg);
     if(meta && meta.sha !== cfg.lastSha){
-      const info = await syncGetLastCommit(cfg);
-      if(!window.confirm("雲端已有一份備份（" + syncInfoText(info) + "），而且不是這台裝置上次同步的版本。\n\n推送會覆蓋它。要繼續嗎？\n（如果不確定，請先取消並按「從雲端拉取」）")){
-        say("已取消推送。"); return;
+      say("比對雲端內容中…");
+      let remote = null;
+      try{ remote = await syncFetchRemote(cfg, meta); }catch(err){ remote = null; }
+      if(remote){
+        const choice = await syncConflictDialog(cfg, remote);
+        if(choice === "pull"){ await syncApplyPull(cfg, say, meta, remote.data, remote.info, true); return; }
+        if(choice !== "push"){ say("已取消推送。"); return; }
+      } else {
+        // 讀不到雲端內容（檔案損毀等）：退回簡單的確認，讓使用者仍然可以選擇覆蓋
+        const info = await syncGetLastCommit(cfg);
+        const ok = await askDialog({
+          title: "雲端已有不同的版本",
+          message: "雲端已有一份備份（" + syncInfoText(info) + "），而且不是這台裝置上次同步的版本，內容也無法讀取比對。\n推送會覆蓋它，要繼續嗎？",
+          buttons: [{ label: "取消", value: false }, { label: "覆蓋雲端", value: true, kind: "danger" }],
+          cancelValue: false, focusIndex: 0
+        });
+        if(!ok){ say("已取消推送。"); return; }
       }
     }
     say("打包資料中…");
@@ -13190,12 +13678,7 @@
     say("推送完成：" + payload.students.length + " 位學生。\n" + syncStatusIdle(cfg));
   }
 
-  async function syncPull(cfg, say){
-    syncValidate(cfg);
-    say("檢查雲端中…");
-    const meta = await syncGetMeta(cfg);
-    if(!meta){ say("雲端還沒有備份檔，請先在另一台裝置推送。"); return; }
-    say("下載中…");
+  async function syncFetchRemote(cfg, meta){
     const blobRes = await syncGh(cfg, "/repos/" + cfg.repo.trim() + "/git/blobs/" + meta.sha);
     const blob = await blobRes.json();
     const bytes = syncB64ToBytes(blob.content);
@@ -13203,7 +13686,54 @@
     try{ data = await parseBackupBuffer(bytes.buffer); }
     catch(err){ throw SyncError("雲端的檔案無法讀取：" + err.message, "other"); }
     const info = await syncGetLastCommit(cfg);
-    const localCount = (await getAllStudents()).filter(function(st){ return !st.borrowed; }).length;
+    return { data: data, info: info };
+  }
+
+  // 兩邊都有改動時：顯示差異摘要，讓使用者決定誰覆蓋誰。回傳 "pull"｜"push"｜null（取消）
+  async function syncConflictDialog(cfg, remote){
+    const d = await backupDiff(remote.data);
+    const lines = [
+      "雲端的版本不是這台上次同步的版本，兩邊的資料不同。",
+      "",
+      "雲端：" + syncInfoText(remote.info) + "　" + remote.data.students.length + " 位學生、" + remote.data.schools.length + " 所學校",
+      "本機：" + d.localStudentCount + " 位學生、" + d.localSchoolCount + " 所學校" + (cfg.lastSyncAt ? "（上次同步 " + syncFmtTime(cfg.lastSyncAt) + "）" : ""),
+      ""
+    ];
+    const st = d.students, sc = d.schools;
+    if(st.add.length) lines.push("只在雲端有：" + st.add.length + " 位學生（" + diffNames(st.add, 4) + "）");
+    if(st.del.length) lines.push("只在本機有：" + st.del.length + " 位學生（" + diffNames(st.del, 4) + "）");
+    if(st.upd.length) lines.push("兩邊都有但內容不同：" + st.upd.length + " 位學生（" + diffNames(st.upd, 4) + "）");
+    if(sc.add.length || sc.del.length || sc.upd.length) lines.push("學校：只在雲端 " + sc.add.length + "、只在本機 " + sc.del.length + "、內容不同 " + sc.upd.length);
+    if(!st.add.length && !st.del.length && !st.upd.length && !sc.add.length && !sc.del.length && !sc.upd.length){
+      lines.push("學生與學校的內容一致（差別只在簡寫表等其他資料）。");
+    }
+    lines.push("", "要用哪一邊的資料為準？另一邊會被覆蓋。");
+    return askDialog({
+      title: "雲端與這台的資料不同",
+      message: lines.join("\n"),
+      buttons: [
+        { label: "取消", value: null },
+        { label: "用雲端覆蓋本機", value: "pull", kind: "danger" },
+        { label: "用本機覆蓋雲端", value: "push", kind: "danger" }
+      ],
+      cancelValue: null, focusIndex: 0
+    });
+  }
+
+  async function syncPull(cfg, say){
+    syncValidate(cfg);
+    say("檢查雲端中…");
+    const meta = await syncGetMeta(cfg);
+    if(!meta){ say("雲端還沒有備份檔，請先在另一台裝置推送。"); return; }
+    say("下載中…");
+    const remote = await syncFetchRemote(cfg, meta);
+    return syncApplyPull(cfg, say, meta, remote.data, remote.info, false);
+  }
+
+  // confirmed = true：使用者已經在衝突視窗選了「用雲端覆蓋本機」，不再重複詢問
+  async function syncApplyPull(cfg, say, meta, data, info, confirmed){
+    const d = await backupDiff(data);
+    const localCount = d.localStudentCount;
     const same = meta.sha === cfg.lastSha ? "\n（雲端版本和你上次同步的相同）" : "";
     // 依設定決定要不要先下載本機備份：never 不下載｜same 內容一致才不下載｜edit 只有學生資料不同也不下載｜always 永遠下載
     // （舊版的 "numeric" 選項視同 "edit"）
@@ -13212,8 +13742,18 @@
     if(bkMode === "same" || bkMode === "edit") relation = syncCompareBackups(await buildBackupPayload("keep"), data);
     const doBackup = bkMode === "always" || (bkMode === "same" && relation !== "same") || (bkMode === "edit" && relation === "other");
     const relNote = relation === "same" ? "\n本機與雲端的內容完全一致。" : (relation === "student" && bkMode === "edit" ? "\n本機與雲端只有學生資料（編輯視窗的內容）不同。" : "");
-    if(!window.confirm("從雲端拉取會用雲端的資料「取代」這台的資料。\n\n本機：" + localCount + " 位學生 → 雲端：" + data.students.length + " 位學生\n雲端版本：" + syncInfoText(info) + same + relNote + "\n\n" + (doBackup ? "覆蓋前會先自動下載一份本機備份。" : "依你的設定，這次不會下載本機備份。") + "要繼續嗎？")){
-      say("已取消拉取。"); return;
+    if(!confirmed){
+      const ok = await askDialog({
+        title: "從雲端拉取",
+        message: "會用雲端的資料「取代」這台的資料。\n\n" +
+          "本機：" + localCount + " 位學生 → 雲端：" + data.students.length + " 位學生\n" +
+          "雲端版本：" + syncInfoText(info) + same + relNote + "\n\n" +
+          "套用後的變化\n" + diffLine("學生", d.students, true) + "\n" + diffLine("學校", d.schools, true) + "\n\n" +
+          (doBackup ? "覆蓋前會先自動下載一份本機備份。" : "依你的設定，這次不會下載本機備份。"),
+        buttons: [{ label: "取消", value: false }, { label: "拉取並取代", value: true, kind: "danger" }],
+        cancelValue: false, focusIndex: 0
+      });
+      if(!ok){ say("已取消拉取。"); return; }
     }
     say(doBackup ? "備份本機資料並套用中…" : "套用中…");
     if(doBackup) await exportBackup();       // 先把本機資料下載成備份檔，拉錯可以還原
@@ -13222,6 +13762,227 @@
     cfg.lastSyncAt = new Date().toISOString();
     syncSaveCfg(cfg);
     say("拉取完成：" + data.students.length + " 位學生。\n" + syncStatusIdle(cfg));
+  }
+
+
+  // 數一下分支上有幾筆歷史（用 per_page=1 時，最後一頁的頁碼就是總筆數）；取不到就回傳 0
+  async function syncCountCommits(cfg, branch){
+    try{
+      const res = await syncGh(cfg, "/repos/" + cfg.repo.trim() + "/commits?per_page=1&sha=" + encodeURIComponent(branch));
+      const link = res.headers.get("link") || "";
+      const m = /[?&]page=(\d+)[^>]*>;\s*rel="last"/.exec(link);
+      if(m) return parseInt(m[1], 10);
+      const arr = await res.json();
+      return Array.isArray(arr) && arr.length ? 1 : 0;
+    }catch(_){ return 0; }
+  }
+
+  // 除錯：比對這台和雲端備份的差異（只讀取，不會改動本機或雲端）
+  async function showSyncDiffInfo(){
+    const cfg = syncLoadCfg();
+    if(!syncIsConfigured(cfg)){ showToast("請先在這一頁填好 repo 和 token"); return; }
+    try{
+      syncValidate(cfg);
+      const meta = await syncGetMeta(cfg);
+      if(!meta){
+        await askDialog({ fit: true, title: "本機與雲端差異", message: "雲端還沒有備份檔，沒有東西可以比對。", buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
+        return;
+      }
+      const remote = await syncFetchRemote(cfg, meta);
+      const cloud = remote.data;
+      const d = await backupDiff(cloud);                       // add＝只在雲端、del＝只在本機、upd＝兩邊都有但內容不同
+      const localPayload = await buildBackupPayload("keep");
+      const relation = syncCompareBackups(localPayload, cloud);
+
+      // 每位「內容不同」的學生，列出是哪些欄位不同（圖片不比）
+      const localById = new Map(localPayload.students.map(function(x){ return [x.id, x]; }));
+      const strip = function(o){ const c = Object.assign({}, o); delete c.avatar; delete c.avatar2; return c; };
+      const fieldDiffs = [];
+      cloud.students.forEach(function(cs){
+        const ls = localById.get(cs.id);
+        if(!ls) return;
+        const a = strip(ls), b = strip(cs), keys = {};
+        Object.keys(a).concat(Object.keys(b)).forEach(function(k){ keys[k] = 1; });
+        const changed = Object.keys(keys).filter(function(k){
+          return JSON.stringify(syncCanon(a[k])) !== JSON.stringify(syncCanon(b[k]));
+        });
+        if(changed.length) fieldDiffs.push({ name: cs.name || "（未命名）", fields: changed });
+      });
+      const listFieldDiffs = function(max){
+        return fieldDiffs.slice(0, max).map(function(x){
+          const f = x.fields.slice(0, 6).join("、") + (x.fields.length > 6 ? "…等 " + x.fields.length + " 項" : "");
+          return "　‧ " + x.name + "：" + f;
+        }).concat(fieldDiffs.length > max ? ["　…另有 " + (fieldDiffs.length - max) + " 位"] : []);
+      };
+
+      const st = d.students, sc = d.schools;
+      const abbrevSame = JSON.stringify(syncCanon(localPayload.abbrevList || [])) === JSON.stringify(syncCanon(cloud.abbrevList || []));
+      const groupsSame = JSON.stringify(syncCanon(localPayload.variantGroups || {})) === JSON.stringify(syncCanon(cloud.variantGroups || {}));
+      const lines = [
+        "雲端：" + syncInfoText(remote.info) + "　" + cloud.students.length + " 位學生、" + cloud.schools.length + " 所學校",
+        "本機：" + d.localStudentCount + " 位學生、" + d.localSchoolCount + " 所學校" + (cfg.lastSyncAt ? "（上次同步 " + syncFmtTime(cfg.lastSyncAt) + "）" : "（尚未同步過）"),
+        "雲端版本：" + (cfg.lastSha ? (meta.sha === cfg.lastSha ? "和這台上次同步的相同（雲端沒有人更新過）" : "和這台上次同步的不同（別的裝置推送過）") : "這台沒有同步紀錄"),
+        ""
+      ];
+      if(relation === "same"){
+        lines.push("結果：本機與雲端的內容完全一致。");
+      } else {
+        lines.push("結果：有差異。", "");
+        lines.push("【學生】只在雲端 " + st.add.length + "、只在本機 " + st.del.length + "、內容不同 " + st.upd.length + "、相同 " + st.same);
+        if(st.add.length) lines.push("　只在雲端：" + diffNames(st.add, 12));
+        if(st.del.length) lines.push("　只在本機：" + diffNames(st.del, 12));
+        if(fieldDiffs.length) lines.push("　內容不同的學生與欄位：", ...listFieldDiffs(10));
+        lines.push("");
+        lines.push("【學校】只在雲端 " + sc.add.length + "、只在本機 " + sc.del.length + "、內容不同 " + sc.upd.length + "、相同 " + sc.same);
+        if(sc.add.length) lines.push("　只在雲端：" + diffNames(sc.add, 12));
+        if(sc.del.length) lines.push("　只在本機：" + diffNames(sc.del, 12));
+        if(sc.upd.length) lines.push("　內容不同：" + diffNames(sc.upd, 12));
+        lines.push("");
+        lines.push("【簡寫表】" + (abbrevSame ? "一致" : "不同") + "　【分組定義】" + (groupsSame ? "一致" : "不同"));
+        lines.push("", "（圖片不列入比對；這只是查看，不會改動任何資料。）");
+      }
+      await askDialog({ fit: true, title: "本機與雲端差異", message: lines.join("\n"), buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
+    }catch(err){
+      showToast((err && err.message) || "無法比對本機與雲端");
+    }
+  }
+
+  // 除錯：同步用（存備份資料）的 GitHub 倉庫有多大、有幾筆歷史
+  async function showSyncRepoInfo(){
+    const cfg = syncLoadCfg();
+    if(!syncIsConfigured(cfg)){ showToast("請先在這一頁填好 repo 和 token"); return; }
+    try{
+      syncValidate(cfg);
+      const repo = await (await syncGh(cfg, "/repos/" + cfg.repo.trim())).json();
+      const branch = (cfg.branch || "").trim() || repo.default_branch || "";
+      const total = branch ? await syncCountCommits(cfg, branch) : 0;
+      const mb = (repo.size || 0) / 1024;
+      const lines = [
+        "倉庫：" + repo.full_name + "（" + (repo.private ? "私人" : "公開") + "）",
+        "大小：約 " + (mb >= 10 ? Math.round(mb) : mb.toFixed(1)) + " MB（GitHub 回報的數字，剛推送完可能有延遲）",
+        "歷史：" + (total ? total + " 筆" : "無法取得") + (branch ? "（分支 " + branch + "）" : "")
+      ];
+      if(mb >= 1024) lines.push("", "已超過 GitHub 建議的 1 GB，建議按「壓縮雲端歷史」。");
+      await askDialog({ fit: true, title: "資料倉庫大小", message: lines.join("\n"), buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
+    }catch(err){
+      showToast((err && err.message) || "無法取得倉庫資訊");
+    }
+  }
+
+  // ---------- 除錯：放這個網頁（HTML）的 GitHub 倉庫有多大 ----------
+  const HTML_REPO_KEY = "ba-roster-html-repo";
+  function guessHtmlRepo(){
+    const m = /^([a-z0-9-]+)\.github\.io$/i.exec(location.hostname);
+    if(!m) return "";
+    const seg = location.pathname.split("/").filter(Boolean)[0];
+    if(seg && !/\.html?$/i.test(seg)) return m[1] + "/" + seg;   // 專案頁：帳號.github.io/倉庫名/
+    return m[1] + "/" + location.hostname;                       // 個人頁：倉庫名就是 帳號.github.io
+  }
+  async function askHtmlRepoName(initial){
+    const o = {
+      title: "網頁所在的 GitHub 倉庫",
+      message: "請輸入放這個網頁的倉庫，格式「帳號/名稱」。",
+      bodyHtml: '<div class="row"><input id="bdHtmlRepo" type="text" class="view-select" placeholder="myname/ba-roster" autocapitalize="off" spellcheck="false" style="width:100%" value="' + escapeHtml(initial || "") + '"></div>',
+      buttons: [{ label: "取消", value: false }, { label: "確定", value: true, kind: "primary" }],
+      cancelValue: false, focusSelector: "#bdHtmlRepo",
+      collect: function(root){ return { repo: root.querySelector("#bdHtmlRepo").value.trim() }; }
+    };
+    if(!(await askDialog(o))) return "";
+    if(!/^[\w.-]+\/[\w.-]+$/.test(o.result.repo)){ showToast("格式不對，請填「帳號/名稱」"); return ""; }
+    try{ localStorage.setItem(HTML_REPO_KEY, o.result.repo); }catch(_){}
+    return o.result.repo;
+  }
+  async function showHtmlRepoInfo(){
+    let repoName = "";
+    try{ repoName = localStorage.getItem(HTML_REPO_KEY) || ""; }catch(_){}
+    if(!repoName) repoName = guessHtmlRepo();
+    if(!repoName){ repoName = await askHtmlRepoName(""); if(!repoName) return; }
+    for(;;){
+      const cfg = syncLoadCfg();
+      const get = async function(path, withToken){
+        const headers = { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+        if(withToken) headers["Authorization"] = "Bearer " + cfg.token.trim();
+        return fetch("https://api.github.com" + path, { headers: headers, cache: "no-store" });
+      };
+      let withToken = false, res;
+      try{
+        res = await get("/repos/" + repoName, false);                    // 先不帶 token（公開倉庫不需要）
+        if(!res.ok && (cfg.token || "").trim()){ withToken = true; res = await get("/repos/" + repoName, true); }   // 私人倉庫才用同步的 token 再試
+      }catch(_){ showToast("連不上 GitHub，請確認網路連線"); return; }
+      let message, again = false;
+      if(res.ok){
+        const repo = await res.json();
+        let total = 0;
+        try{
+          const branch = repo.default_branch || "";
+          if(branch){
+            const r2 = await get("/repos/" + repoName + "/commits?per_page=1&sha=" + encodeURIComponent(branch), withToken);
+            if(r2.ok){
+              const m = /[?&]page=(\d+)[^>]*>;\s*rel="last"/.exec(r2.headers.get("link") || "");
+              total = m ? parseInt(m[1], 10) : ((await r2.json()).length ? 1 : 0);
+            }
+          }
+        }catch(_){}
+        const mb = (repo.size || 0) / 1024;
+        const lines = [
+          "倉庫：" + repo.full_name + "（" + (repo.private ? "私人" : "公開") + "）",
+          "大小：約 " + (mb >= 10 ? Math.round(mb) : mb.toFixed(1)) + " MB（GitHub 回報的數字，剛推送完可能有延遲）",
+          "歷史：" + (total ? total + " 筆" : "無法取得") + (repo.default_branch ? "（分支 " + repo.default_branch + "）" : "")
+        ];
+        if(mb >= 1024) lines.push("", "已超過 GitHub 建議的 1 GB。");
+        message = lines.join("\n");
+      } else {
+        again = true;
+        message = res.status === 404 ? "找不到倉庫「" + repoName + "」。\n如果它是私人倉庫，需要先在這一頁填好 token（要有該倉庫的讀取權限）。"
+                : res.status === 403 ? "GitHub 暫時拒絕了請求（可能是請求次數太多），請稍後再試。"
+                : "查詢失敗（狀態碼 " + res.status + "）。";
+      }
+      const v = await askDialog({
+        fit: true, title: "網頁倉庫大小", message: message,
+        buttons: [{ label: "更換倉庫", value: "change" }, { label: "關閉", value: null, kind: "primary" }],
+        cancelValue: null, focusIndex: 1
+      });
+      if(v !== "change") return;
+      const next = await askHtmlRepoName(repoName);
+      if(!next) return;
+      repoName = next;
+    }
+  }
+
+  // 把雲端 repo 的歷史壓成只剩最新的一筆提交（內容、檔案版本都不變，所以各裝置的「上次同步版本」仍然有效）
+  async function syncSquash(cfg, say){
+    syncValidate(cfg);
+    say("檢查雲端中…");
+    const base = "/repos/" + cfg.repo.trim();
+    const repo = await (await syncGh(cfg, base)).json();
+    const branch = (cfg.branch || "").trim() || repo.default_branch;
+    if(!branch) throw SyncError("找不到這個 repo 的預設分支。", "other");
+    const refPath = base + "/git/ref/heads/" + branch.split("/").map(encodeURIComponent).join("/");
+    const head = (await (await syncGh(cfg, refPath)).json()).object.sha;
+    const commit = await (await syncGh(cfg, base + "/git/commits/" + head)).json();
+    const total = await syncCountCommits(cfg, branch);
+    if(total <= 1){ say("雲端的歷史本來就只有一筆，不需要壓縮。"); return; }
+    const sizeMB = repo.size ? (repo.size / 1024) : 0;
+    const ok = await askDialog({
+      title: "壓縮雲端歷史",
+      message: "目前雲端有 " + total + " 筆歷史" + (sizeMB ? "，倉庫約 " + (sizeMB >= 10 ? Math.round(sizeMB) : sizeMB.toFixed(1)) + " MB（GitHub 回報的大小，可能有延遲）" : "") + "。\n\n" +
+        "壓縮後只保留最新的一個版本。目前的資料不會變，其他裝置也不受影響，但之前的版本都無法再還原。\n\n" +
+        "分支：" + branch,
+      buttons: [{ label: "取消", value: false }, { label: "壓縮歷史", value: true, kind: "danger" }],
+      cancelValue: false, focusIndex: 0
+    });
+    if(!ok){ say("已取消。"); return; }
+    say("壓縮中…");
+    // 用同一棵檔案樹建一個「沒有上一代」的新提交，保留原本的訊息與時間（同步提示要靠它顯示裝置和時間）
+    const body = { message: commit.message, tree: commit.tree.sha, parents: [] };
+    if(commit.author) body.author = { name: commit.author.name, email: commit.author.email, date: commit.author.date };
+    if(commit.committer) body.committer = { name: commit.committer.name, email: commit.committer.email, date: commit.committer.date };
+    const created = await (await syncGh(cfg, base + "/git/commits", { method: "POST", json: body })).json();
+    // 更新前再確認一次：如果這幾秒內別的裝置剛推送，就不要蓋掉它
+    const nowHead = (await (await syncGh(cfg, refPath)).json()).object.sha;
+    if(nowHead !== head) throw SyncError("雲端剛剛被更新了，這次沒有壓縮，請重新操作一次。", "conflict");
+    await syncGh(cfg, refPath.replace("/git/ref/", "/git/refs/"), { method: "PATCH", json: { sha: created.sha, force: true } });
+    say("已壓縮：歷史從 " + total + " 筆變成 1 筆。\nGitHub 可能要過一段時間才會真正釋放空間，網頁上顯示的大小不一定馬上變小。");
   }
 
   // Sidebar drag-to-resize
@@ -13483,10 +14244,6 @@
   })();
   document.getElementById("btnEditSchool").addEventListener("click", openEditSchoolModal);
   document.getElementById("btnAddStudent").addEventListener("click", function(){ openStudentModal(null); });
-  document.getElementById("btnExport").addEventListener("click", exportBackup);
-  document.getElementById("btnImport").addEventListener("click", function(){
-    document.getElementById("importFileInput").click();
-  });
   document.getElementById("importFileInput").addEventListener("change", function(e){
     const file = e.target.files[0];
     if(file) importBackup(file);
@@ -13494,7 +14251,6 @@
   });
   document.getElementById("btnAbbrevList").addEventListener("click", openAbbrevListModal);
   document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
-  document.getElementById("btnTrash").addEventListener("click", openTrashModal);
 
   // ----- Mobile top bar: hamburger menu (匯出/匯入/簡寫清單/通用設定) and
   // search toggle. Purely presentational — reuses the same .actions /
@@ -13582,6 +14338,7 @@
   });
 
   document.getElementById("btnEnterOutput").addEventListener("click", function(){ toggleOutputMode(true); });
+  document.getElementById("btnEnterBatch").addEventListener("click", enterBatchMode);
   document.getElementById("btnCancelOutput").addEventListener("click", function(){ toggleOutputMode(false); });
   document.getElementById("btnViewOutput").addEventListener("click", openExportModal);
   document.getElementById("outputCount").addEventListener("click", function(){
