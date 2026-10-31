@@ -279,6 +279,9 @@
   .dbg-status.on{ display:flex; }
   .dbg-status .dbg-spin{ width:14px; height:14px; flex:none; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:dbgSpin .8s linear infinite; }
   @keyframes dbgSpin{ to{ transform:rotate(360deg); } }
+  /* 作業完畢：左邊的轉圈圈換成一個勾 */
+  .dbg-status.dbg-done .dbg-spin{ border:none; border-radius:0; animation:none; background:#2f9e5b; width:16px; height:16px;
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12.5l5 5L20 6.5'/%3E%3C/svg%3E") center/contain no-repeat; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12.5l5 5L20 6.5'/%3E%3C/svg%3E") center/contain no-repeat; }
   .avatar-card .aff-minus{ left:3px; }
   .avatar-card .aff-plus{ right:3px; }
   .avatar-card.aff-quick:hover .aff-step, .avatar-card.aff-quick:focus-within .aff-step{ opacity:1; pointer-events:auto; }
@@ -4878,6 +4881,8 @@
           return '<button type="button" class="btn ' + cls + '" data-i="' + i + '">' + escapeHtml(b.label) + '</button>';
         }).join("") + '</div></div>';
       document.body.appendChild(back);
+      // 除錯作業的結果視窗跳出時，通知設定頁把「作業中」改成「作業完畢」（需要輸入的視窗不算）
+      if(window.__dbgOnDialog){ try{ window.__dbgOnDialog(opts); }catch(_){} }
       const btnEls = Array.prototype.slice.call(back.querySelectorAll(".ui-dialog-actions button"));
       const focusables = Array.prototype.slice.call(back.querySelectorAll("input, select, button"));
       const fi = opts.focusIndex != null ? opts.focusIndex : Math.max(0, buttons.map(function(b){ return b.kind; }).lastIndexOf("primary"));
@@ -4888,6 +4893,7 @@
         document.removeEventListener("keydown", onKey, true);
         if(back.parentNode) back.parentNode.removeChild(back);
         try{ if(prevFocus && prevFocus.focus) prevFocus.focus(); }catch(_){}
+        if(window.__dbgOnDialogEnd){ try{ window.__dbgOnDialogEnd(opts); }catch(_){} }
         resolve(v);
       }
       function onKey(e){
@@ -5122,6 +5128,7 @@
   let closeModalPending = false;
   function closeModal(){
     if(closeModalPending) return;
+    if(window.__dbgBusy){ showToast("作業中，請等作業完成再關閉設定"); return; }
     if(modalBeforeClose){
       const r = modalBeforeClose();
       if(r && typeof r.then === "function"){
@@ -7500,6 +7507,7 @@
         });
       });
       async function run(fn){
+        if(window.__dbgBusy){ showToast("除錯作業進行中，請等它完成再操作"); return; }
         // 背景檢查還沒結束時稍等一下（通常不到一秒），不要把使用者的點擊吞掉
         for(let i = 0; i < 50 && syncOpBusy; i++) await new Promise(function(r){ setTimeout(r, 100); });
         if(syncOpBusy) return;
@@ -7531,24 +7539,79 @@
         var dbgBtns = [document.getElementById("btnHtmlRepoInfo"), document.getElementById("btnSyncRepoInfo"), document.getElementById("btnSyncDiffInfo")];
         var dbgBox = document.getElementById("dbgStatus");
         var dbgTxt = document.getElementById("dbgStatusText");
-        function bindDbg(btn, fn, busyText){
+        function bindDbg(btn, fn, busyText, timeoutMs){
           btn.addEventListener("click", async function(){
             if(dbgBusy) return;
             dbgBusy = true;
             dbgBtns.forEach(function(b){ b.disabled = true; });
-            if(dbgBox){ dbgTxt.textContent = busyText; dbgBox.classList.add("on"); }
-            try{ await fn(); }
+            // 訊息框每次點擊時才找（找不到就現場補一個），並直接用 inline 樣式顯示，不依賴 CSS 的 .on
+            var box = document.getElementById("dbgStatus"), txt = document.getElementById("dbgStatusText");
+            if(!box){
+              var host = btn.parentNode;
+              box = document.createElement("div");
+              box.id = "dbgStatus"; box.className = "dbg-status"; box.setAttribute("role", "status");
+              box.innerHTML = '<span class="dbg-spin" aria-hidden="true"></span><span id="dbgStatusText"></span>';
+              host.parentNode.insertBefore(box, host.nextSibling);
+              txt = box.querySelector("#dbgStatusText");
+            }
+            window.__dbgBusy = true;
+            box.classList.remove("dbg-done");
+            txt.textContent = busyText; box.classList.add("on"); box.style.display = "flex";
+            // 訊息在按鈕下方，位置在頁面底部時自動捲到看得見，不用自己往下滑
+            try{ box.scrollIntoView({ block: "nearest", behavior: document.body.classList.contains("reduce-motion") ? "auto" : "smooth" }); }catch(e){ box.scrollIntoView(); }
+            // 逾時自動取消：超過 DBG_TIMEOUT_MS 還沒結束就中止網路請求並解除鎖定（等你操作視窗的時間不算）
+            var DBG_TIMEOUT_MS = timeoutMs || 15000, timer = null, finished = false, rejectTimeout;
+            var ac = (typeof AbortController === "function") ? new AbortController() : null;
+            window.__dbgSignal = ac ? ac.signal : null;
+            function arm(){
+              clearTimeout(timer);
+              timer = setTimeout(function(){
+                if(finished) return;
+                try{ if(ac) ac.abort(); }catch(_){}
+                if(rejectTimeout) rejectTimeout(new Error("作業逾時（超過 " + (DBG_TIMEOUT_MS / 1000) + " 秒），已自動取消，請檢查網路後再試"));
+              }, DBG_TIMEOUT_MS);
+            }
+            // 結果視窗跳出：作業完畢，訊息改掉、停止計時；視窗開著時暫停計時，關掉後若還要繼續查詢就重新計時
+            window.__dbgOnDialog = function(o){
+              clearTimeout(timer);
+              if(o && o.bodyHtml) return;
+              var b = document.getElementById("dbgStatus"), t = document.getElementById("dbgStatusText");
+              if(t) t.textContent = "作業完畢：結果已顯示在視窗中";
+              if(b) b.classList.add("dbg-done");
+            };
+            window.__dbgOnDialogEnd = function(){ if(!finished) arm(); };
+            arm();
+            var shownAt = Date.now();
+            try{ await Promise.race([fn(), new Promise(function(_, rej){ rejectTimeout = rej; })]); }
             catch(err){ showToast((err && err.message) || "無法取得倉庫資訊"); }
             finally{
+              finished = true; clearTimeout(timer);
+              // 很快就查完時，讓訊息至少停留 0.6 秒，才看得到
+              var wait = 600 - (Date.now() - shownAt);
+              if(wait > 0) await new Promise(function(r){ setTimeout(r, wait); });
               dbgBusy = false;
+              window.__dbgBusy = false; window.__dbgOnDialog = null; window.__dbgOnDialogEnd = null; window.__dbgSignal = null;
               dbgBtns.forEach(function(b){ b.disabled = false; });
-              if(dbgBox) dbgBox.classList.remove("on");
+              box.classList.remove("on", "dbg-done"); box.style.display = "";
             }
           });
         }
         bindDbg(dbgBtns[0], showHtmlRepoInfo, "作業中：正在查詢網頁倉庫大小…");
         bindDbg(dbgBtns[1], showSyncRepoInfo, "作業中：正在查詢資料倉庫大小…");
-        bindDbg(dbgBtns[2], showSyncDiffInfo, "作業中：正在下載雲端備份並比對，請稍候…");
+        bindDbg(dbgBtns[2], showSyncDiffInfo, "作業中：正在下載雲端備份並比對，請稍候…", 30000);
+        // 作業中：不能切到其他分頁／磁貼／搜尋結果（關閉設定由 closeModal 擋）
+        if(!window.__dbgNavGuard){
+          window.__dbgNavGuard = true;
+          document.addEventListener("click", function(e){
+            if(!window.__dbgBusy) return;
+            var t = e.target;
+            if(!t || !t.closest || t.closest(".ui-dialog-backdrop")) return;
+            if(t.closest(".settings-tab, .st-tile, .st-qtile, #settingsBack, #settingsSearchResults, .settings-search-btn")){
+              e.preventDefault(); e.stopImmediatePropagation();
+              showToast("作業中，請等作業完成再切換分頁");
+            }
+          }, true);
+        }
       })();
       document.getElementById("btnSyncClear").addEventListener("click", function(){
         if(!window.confirm("要清除這台裝置上的雲端連線資料（repo、token、裝置名稱、同步記錄）嗎？\n\n學生資料與雲端的備份都不會被刪除。")) return;
@@ -13631,9 +13694,11 @@
           "Accept": "application/vnd.github+json",
           "X-GitHub-Api-Version": "2022-11-28"
         }, opts.json ? { "Content-Type": "application/json" } : {}),
-        body: opts.json ? JSON.stringify(opts.json) : undefined
+        body: opts.json ? JSON.stringify(opts.json) : undefined,
+        signal: window.__dbgSignal || undefined   // 除錯作業逾時時用來中止
       });
     }catch(_){
+      if(window.__dbgSignal && window.__dbgSignal.aborted) throw SyncError("作業逾時，已自動取消，請檢查網路後再試", "network");
       throw SyncError("連不上 GitHub，請確認網路連線後再試。", "network");
     }
     if(res.ok || (opts.allow404 && res.status === 404)) return res;
@@ -14080,7 +14145,7 @@
       const get = async function(path, withToken){
         const headers = { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
         if(withToken) headers["Authorization"] = "Bearer " + cfg.token.trim();
-        return fetch("https://api.github.com" + path, { headers: headers, cache: "no-store" });
+        return fetch("https://api.github.com" + path, { headers: headers, cache: "no-store", signal: window.__dbgSignal || undefined });
       };
       let withToken = false, res;
       try{
