@@ -831,6 +831,35 @@
   .modal.st-detail .settings-head .settings-back{ display:inline-flex; }
   .settings-home{ display:flex; flex-direction:column; gap:12px; }
   .modal.st-detail .settings-home{ display:none; }
+  /* 寬螢幕：左邊分類導覽、右邊內容；窄螢幕維持磁貼首頁 */
+  .modal.st-two-pane{ display:grid; grid-template-columns:200px minmax(0,1fr); grid-template-rows:auto auto minmax(0,1fr) auto; column-gap:20px; height:auto; max-height:min(680px, 90vh); overflow:hidden; max-width:900px !important; }
+  /* 視窗上緣固定在「滿高度時」的位置：高度隨內容變動時，只有下緣在動，左邊導覽不會跟著移位 */
+  .overlay:has(.modal.st-two-pane){ align-items:flex-start; padding-top:max(16px, calc((100vh - min(680px, 90vh)) / 2)); }
+  .modal.st-two-pane > *{ grid-column:1 / -1; }
+  .modal.st-two-pane > .settings-head{ grid-row:1; }
+  .modal.st-two-pane > #settingsSearchWrap{ grid-row:2; }
+  .modal.st-two-pane > #settingsSearchResults{ grid-row:3; overflow-y:auto; min-height:0; }
+  .modal.st-two-pane > #settingsTabs{ grid-column:1; grid-row:3; display:flex; flex-direction:column; flex-wrap:nowrap; gap:2px; margin-top:12px; min-height:min(400px, 60vh); align-self:stretch; overflow-y:auto; border-right:1px solid var(--border); padding-right:12px; }
+  .modal.st-two-pane > .settings-modal-body{ grid-column:2; grid-row:3; min-width:0; min-height:0; overflow-y:auto; padding-right:4px; }
+  /* 捲軸一律隱藏（仍然可以用滾輪、觸控或鍵盤捲動） */
+  .modal.st-two-pane > #settingsTabs, .modal.st-two-pane > .settings-modal-body, .modal.st-two-pane > #settingsSearchResults{ scrollbar-width:none; -ms-overflow-style:none; }
+  .modal.st-two-pane > #settingsTabs::-webkit-scrollbar, .modal.st-two-pane > .settings-modal-body::-webkit-scrollbar, .modal.st-two-pane > #settingsSearchResults::-webkit-scrollbar{ display:none; }
+  .modal.st-two-pane > .modal-actions{ grid-row:4; }
+  .modal.st-two-pane .settings-head .settings-back{ display:none !important; }
+  .modal.st-two-pane .st-more, .modal.st-two-pane .st-ver-home{ display:none; }
+  .modal.st-two-pane .settings-tab{ display:flex; align-items:center; justify-content:flex-start; gap:9px; width:100%; text-align:left; padding:8px 10px; border:none; border-radius:8px; background:transparent; font-size:13px; }
+  .modal.st-two-pane .settings-tab:hover{ background:var(--hover-bg); }
+  .modal.st-two-pane .settings-tab.active{ background:var(--active-tint-bg); color:var(--heading-text); }
+  .settings-tab svg{ width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .st-nav-ver{ display:none; margin:0 2px; font-size:11.5px; line-height:1.5; color:var(--ink-soft); }
+  .modal.st-two-pane .st-nav-ver{ display:block; }
+  /* 左邊導覽的最底部：版本資訊 */
+  .modal.st-two-pane .st-nav-foot{ margin-top:auto; padding-top:12px; }
+  /* 區塊標題前面的小圖示：貼著標題文字，用強調色（「備份與匯出」那種整列的圖示方塊是另一種樣式 .bkp-ic） */
+  .fieldset-title .st-title-ic{ width:16px; height:16px; margin-right:7px; vertical-align:-3px; flex:none; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; color:var(--accent); }
+  body.theme-dark .fieldset-title .st-title-ic{ color:#8FC4F2; }
+  .fieldset-title.st-title-boxed .bkp-ic{ margin-right:10px; vertical-align:middle; }
+  .st-ver-home{ text-align:center; font-size:11.5px; color:var(--ink-soft); margin-top:4px; }
   .st-sec{ margin:2px 2px -4px; font-size:11.5px; font-weight:800; letter-spacing:.08em; color:var(--ink-soft); }
   .st-quick{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; }
   .st-grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
@@ -1686,6 +1715,14 @@
     };
   })();
 
+  // 版本資訊：每次改版時更新這兩個值（顯示在 設定 › 通用設定）
+  const APP_VERSION = "2026.11.01";
+  const APP_UPDATED = "2026-11-01";
+  function appVersionText(){
+    const days = Math.max(0, Math.floor((Date.now() - new Date(APP_UPDATED + "T00:00:00").getTime()) / 86400000));
+    const ago = days === 0 ? "今天更新" : days < 30 ? days + " 天前更新" : days < 365 ? Math.floor(days / 30) + " 個月前更新" : Math.floor(days / 365) + " 年前更新";
+    return "版本 " + APP_VERSION + " · " + ago;
+  }
   const DB_NAME = "ba_roster_db";
   const DB_VERSION = 1;
   let db;
@@ -6691,6 +6728,7 @@
         '<button type="button" class="btn btn-sm settings-tab" data-page="sync">雲端同步</button>' +
         '<button type="button" class="btn btn-sm settings-tab" data-page="backup">備份與匯出</button>' +
         '<button type="button" class="btn btn-sm settings-tab" data-page="webp">圖片格式</button>' +
+        '<div class="st-nav-foot" id="stNavFoot"><div class="st-nav-ver" id="stNavVer"></div></div>' +
       '</div>' +
       '<div class="settings-modal-body">' +
         '<div class="settings-home" id="settingsHome">' +
@@ -6701,8 +6739,8 @@
           '<button type="button" class="st-qtile" id="q_motion"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h3l2-6 4 12 2-6h3"/></svg><span class="q-name">動畫</span><span class="q-val"></span></button>' +
           '<button type="button" class="st-qtile" id="q_density"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="q-name">密度</span><span class="q-val"></span></button>' +
           '</div>' +
-          '<div class="st-sec">更多設定</div>' +
-          '<div class="st-grid">' +
+          '<div class="st-sec st-more">更多設定</div>' +
+          '<div class="st-grid st-more">' +
           '<button type="button" class="st-tile" data-page="appearance"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg><span class="t-name">外觀</span><span class="t-sub" id="tileSub_appearance"></span></button>' +
           '<button type="button" class="st-tile" data-page="motion"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c3-8 5-8 7 0s4 8 7 0 3-4 4-2"/></svg><span class="t-name">動畫</span><span class="t-sub" id="tileSub_motion"></span></button>' +
           '<button type="button" class="st-tile" data-page="image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.5"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg><span class="t-name">背景與卡片</span><span class="t-sub" id="tileSub_image"></span></button>' +
@@ -6713,11 +6751,7 @@
           '<button type="button" class="st-tile" data-page="backup"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 002 2h10a2 2 0 002-2V9M10 13h4"/></svg><span class="t-name">備份與匯出</span><span class="t-sub" id="tileSub_backup"></span></button>' +
           '<button type="button" class="st-tile" data-page="webp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="t-name">圖片格式</span><span class="t-sub" id="tileSub_webp"></span></button>' +
           '</div>' +
-          '<div class="st-sec">儲存空間</div>' +
-          '<div class="storage-usage-box" id="storageUsageBox">' +
-            '<div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width:0%;"></div></div>' +
-            '<div class="storage-usage-text" id="storageUsageText">計算中...</div>' +
-          '</div>' +
+          '<div class="st-ver-home" id="stVerHome"></div>' +
         '</div>' +
         '<div class="settings-page" data-page="limits" style="display:none">' +
           '<div class="settings-num-grid">' +
@@ -6919,6 +6953,11 @@
             '</div>' +
           '</div>' +
           '<div class="variant-group-note">遇到問題要回報時使用：匯出瀏覽器資訊、設定、資料庫內容和最近的錯誤記錄。不含任何圖片，檔案是可直接開啟的 JSON。</div>' +
+          '<div class="fieldset-title">儲存空間</div>' +
+          '<div class="storage-usage-box" id="storageUsageBox">' +
+            '<div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width:0%;"></div></div>' +
+            '<div class="storage-usage-text" id="storageUsageText">計算中...</div>' +
+          '</div>' +
         '</div>' +
         '<div class="settings-page" data-page="webp" style="display:none">' +
           '<div class="fieldset-title">卡片圖片上傳時轉成 <span style="text-transform:none">WebP</span></div>' +
@@ -6957,24 +6996,123 @@
       const tabs = document.querySelectorAll("#settingsTabs .settings-tab");
       const pages = document.querySelectorAll(".settings-modal-body .settings-page");
       const names = {};
+      // 分類導覽的圖示沿用磁貼上的圖示
+      tabs.forEach(function(tb){
+        if(tb.querySelector("svg")) return;
+        const ic = document.querySelector('.st-tile[data-page="' + tb.dataset.page + '"] svg');
+        if(ic) tb.insertBefore(ic.cloneNode(true), tb.firstChild);
+      });
       tabs.forEach(function(tb){ names[tb.dataset.page] = tb.textContent; });
+      const bodyEl = document.querySelector(".settings-modal-body");
+      // 各區塊標題前面的小圖示：依標題開頭的文字對應（沒列到的標題就維持沒有圖示）
+      const TITLE_ICONS = [
+        ["搜尋行為", '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'],
+        ["擴散提示效果", '<circle cx="12" cy="12" r="2"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="10"/>'],
+        ["深淺模式", '<path d="M20 14A8 8 0 1110 4a6.5 6.5 0 0010 10z"/>'],
+        ["護眼模式", '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'],
+        ["護眼期間", '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'],
+        ["介面密度", '<path d="M4 6h16M4 12h16M4 18h16"/>'],
+        ["圓角風格", '<rect x="4" y="4" width="16" height="16" rx="6"/>'],
+        ["篩選面板", '<path d="M3 5h18l-7 8v6l-4-2v-4z"/>'],
+        ["批量編輯按鈕", '<path d="M4 7l2 2 3-3M4 17l2 2 3-3"/><path d="M13 8h7M13 18h7"/>'],
+        ["視窗透明度", '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>'],
+        ["動畫效果", '<path d="M5 12h3l2-6 4 12 2-6h3"/>'],
+        ["各項動畫", '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>'],
+        ["圖片 / 卡片設定", '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/>'],
+        ["開啟網頁時檢查", '<path d="M7 18a4 4 0 010-8 5 5 0 019.5-1A4.5 4.5 0 0117 18"/><path d="M12 11v7M9 15l3 3 3-3"/>'],
+        ["從雲端拉取前", '<path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/>'],
+        ["除錯功能", '<path d="M9 9a3 3 0 016 0v6a3 3 0 01-6 0z"/><path d="M5 12H3M21 12h-2M6 7L4 5M18 7l2-2M6 18l-2 2M18 18l2 2M12 3v3"/>'],
+        ["儲存空間", '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>'],
+        ["卡片圖片上傳時", '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>'],
+        ["匯出時的卡片圖片", '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>'],
+        ["現有卡片圖片", '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>'],
+        ["背景底色", '<path d="M12 3s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z"/>'],
+        ["標題文字", '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>'],
+        ["圖示樣式", '<rect x="4" y="4" width="7" height="7" rx="1.5"/><circle cx="17" cy="7.5" r="3.5"/><path d="M4 20l3.5-6 3.5 6z"/>'],
+        ["點擊行為", '<path d="M5 3l14 7-6 2-2 6z"/>'],
+        ["卡片名條顏色", '<rect x="3" y="9" width="18" height="6" rx="2"/>'],
+        ["屬性海報文字黑底", '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8.5 15L12 8l3.5 7M9.8 13h4.4"/>'],
+        ["側邊欄", '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>'],
+        ["同組角色版本", '<path d="M12 20s-7-4.5-7-10a4 4 0 017-2.5A4 4 0 0119 10c0 5.5-7 10-7 10z"/>'],
+        ["屬性／裝甲", '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>'],
+        ["卡片圖片左下角標", '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="16" r="2"/>'],
+        ["輸出時切換角色形態", '<path d="M7 7h11l-3-3M17 17H6l3 3"/>'],
+        ["技能優先級：文字輸出", '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>'],
+        ["技能優先級：標題與文字語言", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>'],
+        ["技能優先級：圖片背景", '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/>'],
+        ["技能優先級：圖片比例", '<path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/>'],
+        ["技能優先級：邊框", '<rect x="4" y="4" width="16" height="16" rx="3" stroke-dasharray="3 3"/>'],
+        ["技能優先級：圖片字體", '<path d="M4 20L10 4l6 16M6.5 14h7"/>']
+      ];
+      document.querySelectorAll(".settings-modal-body .fieldset-title").forEach(function(el){
+        if(el.querySelector(".st-title-ic")) return;
+        const txt = el.textContent.trim();
+        const hit = TITLE_ICONS.find(function(it){ return txt.indexOf(it[0]) === 0; });
+        if(!hit) return;
+        // 標題下面緊接著「選項按鈕列」的設定 → 用「備份與匯出」那種外框圖示格子；
+        // 下面是其他內容的（儲存空間、除錯功能、圖片 / 卡片設定、滑桿、清單等）→ 維持貼著標題的小圖示
+        const nx = el.nextElementSibling;
+        const boxed = !el.closest(".setting-row") && nx && nx.classList.contains("theme-toggle-row") && txt.indexOf("從雲端拉取前") !== 0;
+        if(boxed){
+          el.classList.add("st-title-boxed");
+          el.insertAdjacentHTML("afterbegin", '<span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + hit[1] + '</svg></span>');
+        } else {
+          el.insertAdjacentHTML("afterbegin", '<svg class="st-title-ic" viewBox="0 0 24 24" aria-hidden="true">' + hit[1] + '</svg>');
+        }
+      });
+      let heightTimer = null, uiReady = false;
+      setTimeout(function(){ uiReady = true; }, 400);
+      // 兩欄模式：切換分類時視窗高度平滑過渡（先量舊高度，切換後量新高度，再用 height 過渡）
+      function withHeightAnim(change){
+        if(!uiReady || !modalEl || !modalEl.classList.contains("st-two-pane") || document.body.classList.contains("reduce-motion")){ change(); return; }
+        clearTimeout(heightTimer);
+        modalEl.style.transition = ""; modalEl.style.height = "";
+        const h0 = modalEl.offsetHeight;
+        change();
+        const h1 = modalEl.offsetHeight;
+        if(Math.abs(h0 - h1) < 2) return;
+        modalEl.style.height = h0 + "px";
+        void modalEl.offsetHeight;
+        modalEl.style.transition = "height .22s ease";
+        modalEl.style.height = h1 + "px";
+        heightTimer = setTimeout(function(){ modalEl.style.transition = ""; modalEl.style.height = ""; }, 260);
+      }
+      const twoPane = function(){ return !!(modalEl && modalEl.classList.contains("st-two-pane")); };
       function showHome(){
         pages.forEach(function(pg){ pg.style.display = "none"; });
-        tabs.forEach(function(tb){ tb.classList.remove("active"); });
+        tabs.forEach(function(tb){ tb.classList.toggle("active", tb.dataset.page === "home"); });
         if(modalEl){ modalEl.classList.remove("st-detail"); modalEl.scrollTop = 0; }
+        if(bodyEl) bodyEl.scrollTop = 0;
         if(titleEl) titleEl.textContent = "通用設定";
       }
       function openPage(id){
-        pages.forEach(function(pg){ pg.style.display = (pg.dataset.page === id) ? "block" : "none"; });
-        tabs.forEach(function(tb){ tb.classList.toggle("active", tb.dataset.page === id); });
-        if(modalEl){ modalEl.classList.add("st-detail"); modalEl.scrollTop = 0; }
-        if(titleEl) titleEl.textContent = names[id] || "通用設定";
+        withHeightAnim(function(){
+          pages.forEach(function(pg){ pg.style.display = (pg.dataset.page === id) ? "block" : "none"; });
+          tabs.forEach(function(tb){ tb.classList.toggle("active", tb.dataset.page === id); });
+          if(modalEl){ modalEl.classList.add("st-detail"); modalEl.scrollTop = 0; }
+          if(bodyEl) bodyEl.scrollTop = 0;
+          if(titleEl) titleEl.textContent = twoPane() ? "通用設定" : (names[id] || "通用設定");
+        });
       }
-      // 隱藏的分頁按鈕留著給「搜尋設定」跳轉用
-      tabs.forEach(function(tb){ tb.addEventListener("click", function(){ openPage(tb.dataset.page); }); });
+      // 分頁按鈕：寬螢幕時是左側導覽，窄螢幕時隱藏（留給「搜尋設定」跳轉用）
+      tabs.forEach(function(tb){ tb.addEventListener("click", function(){ if(tb.dataset.page === "home") showHome(); else openPage(tb.dataset.page); }); });
+      // 版本資訊
+      const verText = appVersionText();
+      ["stNavVer", "stVerHome"].forEach(function(id){ const el = document.getElementById(id); if(el) el.textContent = verText; });
+      // 視窗夠寬就切成左右兩欄；寬度改變時跟著切換
+      const mq = window.matchMedia("(min-width: 900px)");
+      function applyLayout(){
+        if(!modalEl || !modalEl.isConnected){ mq.removeEventListener("change", applyLayout); return; }
+        modalEl.classList.toggle("st-two-pane", mq.matches);
+        if(titleEl && twoPane()) titleEl.textContent = "通用設定";
+        // 兩欄模式沒有「首頁」，還停在首頁時直接顯示第一個分類
+        if(twoPane() && !modalEl.classList.contains("st-detail")) openPage("appearance");
+      }
+      mq.addEventListener("change", applyLayout);
       document.querySelectorAll(".st-tile").forEach(function(b){ b.addEventListener("click", function(){ openPage(b.dataset.page); }); });
       if(backBtn) backBtn.addEventListener("click", showHome);
       showHome();
+      applyLayout();
     })();
 
     // 首頁：快速切換 + 磁貼上的目前設定值。點快速切換＝代替你按對應的原按鈕，所以儲存與預覽都照舊。
@@ -13334,12 +13472,23 @@
 
   // 把備份內容寫進資料庫。mode："merge" 合併｜"replace" 先清空再匯入
   async function applyBackupData(data, mode){
+    // 側邊欄的自訂順序（school.order）不在備份檔裡，而「完全取代」會先清空資料庫、
+    // 學校再重新建立，順序就會被洗掉、側邊欄退回依名稱排列。先記下本機的順序，下面重建學校時還原。
+    const prevOrder = {};
+    try{ (await getAllSchools()).forEach(function(sc){ if(sc.order != null) prevOrder[sc.id] = sc.order; }); }catch(e){ /* 讀不到就當沒有 */ }
+    const hadOrder = Object.keys(prevOrder).length > 0;
+    let nextOrder = hadOrder ? Math.max.apply(null, Object.keys(prevOrder).map(function(k){ return prevOrder[k]; })) + 1 : 0;
     if(mode === "replace"){
       await clearAll();
       localStorage.removeItem("ba-roster-abbrev-list");
       localStorage.removeItem("ba-roster-variant-groups");
     }
-    for(const s of data.schools){ await putSchool({ id:s.id, name:s.name, count:0, icon:s.icon || null, iconRaw:s.iconRaw || s.icon || null, iconBlackBg:!!s.iconBlackBg }); }
+    for(const s of data.schools){
+      const rec = { id:s.id, name:s.name, count:0, icon:s.icon || null, iconRaw:s.iconRaw || s.icon || null, iconBlackBg:!!s.iconBlackBg };
+      if(prevOrder[s.id] != null) rec.order = prevOrder[s.id];          // 本機已有的學校：保留原本的位置
+      else if(hadOrder) rec.order = nextOrder++;                        // 雲端新增的學校：排在最後
+      await putSchool(rec);
+    }
     for(const st of data.students){ await putStudent(st); }
 
     // Restore the abbreviation meanings and custom variant-group names
