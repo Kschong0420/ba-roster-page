@@ -7052,7 +7052,7 @@
         // 標題下面緊接著「選項按鈕列」的設定 → 用「備份與匯出」那種外框圖示格子；
         // 下面是其他內容的（儲存空間、除錯功能、圖片 / 卡片設定、滑桿、清單等）→ 維持貼著標題的小圖示
         const nx = el.nextElementSibling;
-        const boxed = !el.closest(".setting-row") && nx && nx.classList.contains("theme-toggle-row") && txt.indexOf("從雲端拉取前") !== 0;
+        const boxed = !el.closest(".setting-row") && nx && nx.classList.contains("theme-toggle-row") && ["從雲端拉取前", "技能優先級：圖片比例", "技能優先級：邊框"].every(function(k){ return txt.indexOf(k) !== 0; });
         if(boxed){
           el.classList.add("st-title-boxed");
           el.insertAdjacentHTML("afterbegin", '<span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + hit[1] + '</svg></span>');
