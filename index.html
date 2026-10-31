@@ -158,13 +158,12 @@
   .undo-toast button{ border:none; background:none; color:#8FC4F2; font-weight:800; font-size:13px; padding:0 2px; cursor:pointer; }
   .undo-toast button:disabled{ opacity:.5; cursor:default; }
   .ui-dialog-backdrop{ position:fixed; inset:0; z-index:120; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(20,26,45,.5); animation:overlayFadeIn .15s ease both; }
-  .ui-dialog{ background:var(--panel); color:var(--ink); border:1px solid var(--border); border-radius:14px; width:100%; max-width:390px; padding:20px 22px 16px; box-shadow:0 16px 40px rgba(15,20,35,.35); }
+  .ui-dialog{ background:var(--panel); color:var(--ink); border:1px solid var(--border); border-radius:14px; width:max-content; min-width:min(100%, 300px); max-width:min(100%, 560px); padding:20px 22px 16px; box-shadow:0 16px 40px rgba(15,20,35,.35); }
   body.corner-sharp .ui-dialog{ border-radius:4px !important; }
-  /* 寬度依最長一行自動調整（上限 600px），避免短短幾個字就被硬折行 */
-  .ui-dialog.ui-dialog-fit{ width:max-content; min-width:min(100%, 300px); max-width:min(100%, 600px); }
-  .ui-dialog.ui-dialog-fit .ui-dialog-msg{ max-height:60vh; overflow-y:auto; }
+  /* 對話框寬度依最長一行自動調整（上限 560px），避免短短幾個字就被硬折行；含輸入欄位的表單式對話框維持固定寬度 */
+  .ui-dialog.ui-dialog-form{ width:100%; max-width:390px; }
   .ui-dialog h3{ margin:0 0 8px; font-size:16px; }
-  .ui-dialog-msg{ font-size:13px; line-height:1.65; margin-bottom:16px; }
+  .ui-dialog-msg{ font-size:13px; line-height:1.65; margin-bottom:16px; max-height:60vh; overflow-y:auto; }
   .ui-dialog-actions{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
   .trash-row{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
   .trash-row:last-child{ border-bottom:none; }
@@ -258,7 +257,7 @@
   body.corner-sharp .bkp-ic{ border-radius:3px !important; }
   .bkp-btn{ display:inline-flex; align-items:center; gap:5px; }
   .bkp-btn svg{ width:13px; height:13px; flex:none; }
-  .trash-dialog{ max-width:440px; }
+  .ui-dialog.trash-dialog{ width:100%; max-width:440px; }
   .ui-dialog-body{ display:flex; flex-direction:column; gap:8px; margin:-6px 0 14px; }
   .ui-dialog-body .row{ display:flex; align-items:center; gap:8px; }
   .ui-dialog-body select, .ui-dialog-body input{ min-width:0; }
@@ -4623,7 +4622,7 @@
     updateBatchBar();
   }
   async function enterBatchMode(){
-    if(batchMode || outputMode) return;
+    if(batchMode || outputMode || appSettings.batchEditBtn === false) return;
     batchMode = true;
     document.body.classList.add("batch-on");
     ensureBatchBar().hidden = false;
@@ -4768,9 +4767,22 @@
   });
 
   // ---------- 匯入／拉取前：比對備份和本機的差異 ----------
+  // 比對用：「沒有這個欄位」和「欄位是預設值」視為相同。
+  // 編輯視窗每次儲存都會寫入 hasForm2:false、name2:""、activeForm:1、abbrevMeaning2:null 等預設值，
+  // 但舊紀錄（或另一台裝置）可能根本沒有這些欄位，內容其實是一樣的，不該算成差異。
+  function normStudentForCompare(st){
+    const o = {};
+    Object.keys(st || {}).forEach(function(k){
+      const v = st[k];
+      if(v === undefined || v === null || v === "" || v === false) return;
+      if(k === "activeForm" && v === 1) return;
+      o[k] = v;
+    });
+    return o;
+  }
   function backupCanonStudent(st){
     const o = Object.assign({}, st); delete o.avatar; delete o.avatar2;   // 圖片匯出時可能被轉檔，不拿來比
-    return JSON.stringify(syncCanon(o));
+    return JSON.stringify(syncCanon(normStudentForCompare(o)));
   }
   function backupCanonSchool(sc){
     return JSON.stringify(syncCanon({ id: sc.id, name: sc.name, icon: sc.icon || null, iconBlackBg: !!sc.iconBlackBg }));
@@ -4820,7 +4832,7 @@
       const prevFocus = document.activeElement;
       const back = document.createElement("div");
       back.className = "ui-dialog-backdrop";
-      back.innerHTML = '<div class="ui-dialog' + (opts.fit ? ' ui-dialog-fit' : '') + '" role="alertdialog" aria-modal="true">' +
+      back.innerHTML = '<div class="ui-dialog' + (opts.bodyHtml ? ' ui-dialog-form' : '') + '" role="alertdialog" aria-modal="true">' +
         (opts.title ? '<h3>' + escapeHtml(opts.title) + '</h3>' : '') +
         '<div class="ui-dialog-msg">' + escapeHtml(opts.message || "").replace(/\n/g, "<br>") + '</div>' +
         (opts.bodyHtml ? '<div class="ui-dialog-body">' + opts.bodyHtml + '</div>' : '') +
@@ -13610,7 +13622,7 @@
       return (Array.isArray(arr) ? arr.slice() : []).sort(function(x, y){ return String(x && x.id).localeCompare(String(y && y.id)); });
     };
     const rest = function(d){ return { schools: byId(d.schools), abbrevList: d.abbrevList || [], variantGroups: d.variantGroups || {} }; };
-    const ls = byId(local.students), cs = byId(cloud.students);
+    const ls = byId(local.students).map(normStudentForCompare), cs = byId(cloud.students).map(normStudentForCompare);
     const sameRest = JSON.stringify(syncCanon(rest(local))) === JSON.stringify(syncCanon(rest(cloud)));
     if(sameRest && JSON.stringify(syncCanon(ls)) === JSON.stringify(syncCanon(cs))) return "same";
     const sameIds = ls.length === cs.length && ls.every(function(st, i){ return String(st && st.id) === String(cs[i] && cs[i].id); });
@@ -13777,6 +13789,18 @@
     }catch(_){ return 0; }
   }
 
+  // 學生欄位的中文名稱（差異結果用）；沒列在這裡的欄位就顯示原本的欄位名
+  const STUDENT_FIELD_LABELS = {
+    name: "名字", name2: "形態 2 名字", hasForm2: "是否有形態 2", schoolId: "所屬學校", activeForm: "目前形態",
+    level: "等級", affinity: "好感度", weaponStar: "星數", weaponLevel: "專武等級",
+    attribute: "屬性", armor: "裝甲", variantGroupId: "分組",
+    abbrevMeaning: "簡寫意義", abbrevMeaning2: "形態 2 簡寫意義",
+    gearAtk: "裝備：攻擊類", gearSurv: "裝備：生存類", gearPend: "裝備：挂件類", gearBond: "裝備：好感裝備",
+    skillEx: "EX技能", skillN: "普通技能", skillEnh: "强化技能", skillSub: "輔助技能",
+    release1: "解放：攻擊", release2: "解放：生命", release3: "解放：治癒力"
+  };
+  function studentFieldLabel(k){ return STUDENT_FIELD_LABELS[k] || k; }
+
   // 除錯：比對這台和雲端備份的差異（只讀取，不會改動本機或雲端）
   async function showSyncDiffInfo(){
     const cfg = syncLoadCfg();
@@ -13785,7 +13809,7 @@
       syncValidate(cfg);
       const meta = await syncGetMeta(cfg);
       if(!meta){
-        await askDialog({ fit: true, title: "本機與雲端差異", message: "雲端還沒有備份檔，沒有東西可以比對。", buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
+        await askDialog({ title: "本機與雲端差異", message: "雲端還沒有備份檔，沒有東西可以比對。", buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
         return;
       }
       const remote = await syncFetchRemote(cfg, meta);
@@ -13798,10 +13822,12 @@
       const localById = new Map(localPayload.students.map(function(x){ return [x.id, x]; }));
       const strip = function(o){ const c = Object.assign({}, o); delete c.avatar; delete c.avatar2; return c; };
       const fieldDiffs = [];
+      const avatarDiffs = [];
       cloud.students.forEach(function(cs){
         const ls = localById.get(cs.id);
         if(!ls) return;
-        const a = strip(ls), b = strip(cs), keys = {};
+        if((ls.avatar || null) !== (cs.avatar || null) || (ls.avatar2 || null) !== (cs.avatar2 || null)) avatarDiffs.push(cs.name || "（未命名）");
+        const a = normStudentForCompare(strip(ls)), b = normStudentForCompare(strip(cs)), keys = {};
         Object.keys(a).concat(Object.keys(b)).forEach(function(k){ keys[k] = 1; });
         const changed = Object.keys(keys).filter(function(k){
           return JSON.stringify(syncCanon(a[k])) !== JSON.stringify(syncCanon(b[k]));
@@ -13810,7 +13836,7 @@
       });
       const listFieldDiffs = function(max){
         return fieldDiffs.slice(0, max).map(function(x){
-          const f = x.fields.slice(0, 6).join("、") + (x.fields.length > 6 ? "…等 " + x.fields.length + " 項" : "");
+          const f = x.fields.slice(0, 6).map(studentFieldLabel).join("、") + (x.fields.length > 6 ? "…等 " + x.fields.length + " 項" : "");
           return "　‧ " + x.name + "：" + f;
         }).concat(fieldDiffs.length > max ? ["　…另有 " + (fieldDiffs.length - max) + " 位"] : []);
       };
@@ -13839,9 +13865,12 @@
         if(sc.upd.length) lines.push("　內容不同：" + diffNames(sc.upd, 12));
         lines.push("");
         lines.push("【簡寫表】" + (abbrevSame ? "一致" : "不同") + "　【分組定義】" + (groupsSame ? "一致" : "不同"));
-        lines.push("", "（圖片不列入比對；這只是查看，不會改動任何資料。）");
+        lines.push("【卡片圖片】" + (avatarDiffs.length ? "不同 " + avatarDiffs.length + " 位（" + diffNames(avatarDiffs, 8) + "）" : "一致"));
+        const anyListed = st.add.length || st.del.length || st.upd.length || sc.add.length || sc.del.length || sc.upd.length || !abbrevSame || !groupsSame || avatarDiffs.length;
+        if(!anyListed) lines.push("", "只有一些細節不同（例如學校圖示的原圖），學生、學校清單、簡寫表與圖片都一致。");
+        lines.push("", "（這只是查看，不會改動任何資料。）");
       }
-      await askDialog({ fit: true, title: "本機與雲端差異", message: lines.join("\n"), buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
+      await askDialog({ title: "本機與雲端差異", message: lines.join("\n"), buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
     }catch(err){
       showToast((err && err.message) || "無法比對本機與雲端");
     }
@@ -13863,7 +13892,7 @@
         "歷史：" + (total ? total + " 筆" : "無法取得") + (branch ? "（分支 " + branch + "）" : "")
       ];
       if(mb >= 1024) lines.push("", "已超過 GitHub 建議的 1 GB，建議按「壓縮雲端歷史」。");
-      await askDialog({ fit: true, title: "資料倉庫大小", message: lines.join("\n"), buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
+      await askDialog({ title: "資料倉庫大小", message: lines.join("\n"), buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
     }catch(err){
       showToast((err && err.message) || "無法取得倉庫資訊");
     }
@@ -13938,7 +13967,7 @@
                 : "查詢失敗（狀態碼 " + res.status + "）。";
       }
       const v = await askDialog({
-        fit: true, title: "網頁倉庫大小", message: message,
+        title: "網頁倉庫大小", message: message,
         buttons: [{ label: "更換倉庫", value: "change" }, { label: "關閉", value: null, kind: "primary" }],
         cancelValue: null, focusIndex: 1
       });
