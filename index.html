@@ -1769,8 +1769,60 @@
     return reqToPromise(t.objectStore("students").get(id));
   }
   async function getStudentsBySchool(schoolId){
+    // 用 schoolId 索引只讀這間學校的學生，不用先把全部學生（含頭像）載入再過濾
+    if(schoolId != null){
+      try{
+        const t = tx(["students"], "readonly");
+        return await reqToPromise(t.objectStore("students").index("schoolId").getAll(IDBKeyRange.only(schoolId)));
+      }catch(e){ /* 索引或鍵值不可用時退回原本做法 */ }
+    }
     const all = await getAllStudents();
     return all.filter(s => s.schoolId === schoolId);
+  }
+  // 逐筆掃描學生：同一時間記憶體裡只有一筆（含頭像），只保留 pick 回傳的內容（回傳 undefined = 略過）。
+  // 用來取代「getAllStudents() 全部載入再 filter／map」，避免一次把所有頭像同時放進記憶體。
+  function scanStudents(pick){
+    return new Promise(function(resolve, reject){
+      const out = [];
+      let req;
+      try{ req = tx(["students"], "readonly").objectStore("students").openCursor(); }
+      catch(e){ reject(e); return; }
+      req.onsuccess = function(e){
+        const cur = e.target.result;
+        if(!cur){ resolve(out); return; }
+        try{
+          const v = pick(cur.value);
+          if(v !== undefined) out.push(v);
+        }catch(err){ reject(err); return; }
+        cur.continue();
+      };
+      req.onerror = function(){ reject(req.error); };
+    });
+  }
+  // 每間學校的學生人數：只走 schoolId 索引的「鍵」，完全不讀學生資料本身
+  function countStudentsBySchool(){
+    return new Promise(function(resolve, reject){
+      const counts = {};
+      let req;
+      try{ req = tx(["students"], "readonly").objectStore("students").index("schoolId").openKeyCursor(); }
+      catch(e){ reject(e); return; }
+      req.onsuccess = function(e){
+        const cur = e.target.result;
+        if(!cur){ resolve(counts); return; }
+        counts[cur.key] = (counts[cur.key] || 0) + 1;
+        cur.continue();
+      };
+      req.onerror = function(){ reject(req.error); };
+    });
+  }
+  // 側邊欄只需要這些欄位（人數、屬性、「簡寫意義未選」警示點），不需要頭像
+  function slimStudentForList(s){
+    return {
+      id: s.id, schoolId: s.schoolId, attribute: s.attribute,
+      name: s.name, name2: s.name2, borrowed: s.borrowed,
+      hasForm2: s.hasForm2, avatar2: s.avatar2 ? 1 : 0,
+      abbrevMeaning: s.abbrevMeaning, abbrevMeaning2: s.abbrevMeaning2
+    };
   }
   async function putSchool(school){
     const t = tx(["schools"], "readwrite");
@@ -2308,7 +2360,7 @@
   // abbreviations that already exist in the roster but predate this feature,
   // or that were added via import rather than the add/edit student form.
   async function backfillAbbrevFromStudents(){
-    const all = await getAllStudents();
+    const all = await scanStudents(function(s){ return { name: s.name }; });
     let list = loadAbbrevList();
     let changed = false;
     all.forEach(function(s){
@@ -2640,6 +2692,8 @@
     }
     return bgSlotDbPromise;
   }
+  let bgSlotsLoaded = false;     // 啟動時那次載入是否已經完成
+  let bgSlotsReleased = false;   // 快取是否已因為閒置被釋放（再用到時要先重新載入）
   async function bgSlotsLoad(){
     try{
       const db = await bgSlotDb();
@@ -2650,6 +2704,7 @@
       });
       all.forEach(function(rec){ if(rec && rec.slot >= 1 && rec.slot <= BG_SLOT_MAX && rec.data) bgSlotCache[rec.slot] = rec.data; });
     } catch(e){}
+    finally { bgSlotsLoaded = true; }
   }
   async function bgSlotPut(slot, data){
     const db = await bgSlotDb();
@@ -2672,7 +2727,26 @@
     });
     delete bgSlotCache[slot];
   }
-  const bgSlotsReady = bgSlotsLoad();
+  let bgSlotsReady = bgSlotsLoad();
+  // 回到「選擇學校」畫面時釋放 6 個背景方案的快取（每個都是整張圖的 data URL），
+  // 這時用不到它們；下次需要時（開設定視窗、切換方案、匯出／匯入設定）再用 bgSlotsEnsure() 從 IndexedDB 讀回來。
+  function bgSlotsRelease(){
+    if(!bgSlotsLoaded || bgSlotsReleased) return;
+    if(Object.keys(bgSlotPending).length) return;           // 有尚未儲存的方案：不動
+    if(document.getElementById("st_bgOpacity")) return;     // 設定視窗開著：不動
+    let any = false;
+    Object.keys(bgSlotCache).forEach(function(k){ delete bgSlotCache[k]; any = true; });
+    if(any) bgSlotsReleased = true;
+  }
+  function bgSlotsEnsure(){
+    if(bgSlotsReleased){
+      bgSlotsReleased = false;
+      Object.keys(bgSlotCache).forEach(function(k){ delete bgSlotCache[k]; });   // 先清掉殘留，確保和資料庫一致
+      bgSlotsLoaded = false;
+      bgSlotsReady = bgSlotsLoad();
+    }
+    return bgSlotsReady;
+  }
 
   // 尚未儲存的方案快照（只在記憶體）。讀取方案內容時，暫存的優先於 IndexedDB 的。
   const bgSlotPending = {};
@@ -2827,8 +2901,8 @@
     if(!groupId) return;
     const groups = getVariantGroupsForBase(baseName);
     if(!groups.some(function(g){ return g.id === groupId; })) return;
-    const all = await getAllStudents();
-    const stillHasMember = all.some(function(s){ return effectiveGroupId(s) === groupId; });
+    const memberGroups = await scanStudents(function(s){ return effectiveGroupId(s); });
+    const stillHasMember = memberGroups.some(function(g){ return g === groupId; });
     if(stillHasMember) return;
     const remaining = groups.filter(function(g){ return g.id !== groupId; });
     setVariantGroupsForBase(baseName, remaining);
@@ -2870,8 +2944,8 @@
   function isBorrowed(st){ return !!(st && st.borrowed); }
   const BORROWED_NO_GROWTH_TEXT = "借用角色不支援養成顯示";
   async function findOtherBorrowed(exceptId){
-    const all = await getAllStudents();
-    return all.find(function(s){ return s.borrowed && s.id !== exceptId; }) || null;
+    const found = await scanStudents(function(s){ return (s.borrowed && s.id !== exceptId) ? s : undefined; });
+    return found[0] || null;
   }
 
   // A-Z sort that keeps default-group ("組別1") variants of a character
@@ -2918,9 +2992,8 @@
   async function findRawVariantMatches(name, excludeId){
     const base = getBaseVariantName(name);
     if(!base) return [];
-    const all = await getAllStudents();
-    return all.filter(function(s){
-      return s.id !== excludeId && !s.borrowed && getBaseVariantName(s.name) === base;
+    return scanStudents(function(s){
+      return (s.id !== excludeId && !s.borrowed && getBaseVariantName(s.name) === base) ? s : undefined;
     });
   }
 
@@ -3113,7 +3186,12 @@
     const mobile = document.getElementById("mobileSchools");
     const shouldAnimateItems = sidebarTab !== lastSidebarViewKey;
     lastSidebarViewKey = sidebarTab;
-    const all = await getAllStudents();
+    const all = await scanStudents(slimStudentForList);
+    // 每次重繪側邊欄時順便用剛讀到的學生資料重算各校人數，
+    // 這樣新增／刪除／復原學生後，不用各處再手動呼叫 refreshCounts() 數字也會是最新的
+    const liveCounts = {};
+    all.forEach(function(s){ liveCounts[s.schoolId] = (liveCounts[s.schoolId] || 0) + 1; });
+    schools.forEach(function(sc){ sc.count = liveCounts[sc.id] || 0; });
     const warnDotHtml = '<span class="abbrev-warn-dot" title="有角色的簡寫意義尚未選擇"></span>';
 
     if(sidebarTab === "attribute"){
@@ -3208,8 +3286,8 @@
   }
 
   async function refreshCounts(){
-    const all = await getAllStudents();
-    schools.forEach(s=>{ s.count = all.filter(st => st.schoolId === s.id).length; });
+    const counts = await countStudentsBySchool();
+    schools.forEach(s=>{ s.count = counts[s.id] || 0; });
   }
 
   async function selectSchool(id){
@@ -3332,8 +3410,8 @@
       }
     } else {
       if(selectedIds.length >= 10){ showToast("最多只能選擇 10 位學生"); return; }
-      const allForCheck = await getAllStudents();
-      const target = allForCheck.find(function(s){ return s.id === id; });
+      const target = await getStudentById(id);
+      const allForCheck = target ? (await Promise.all(selectedIds.map(function(x){ return getStudentById(x); }))).filter(Boolean) : [];
       if(target){
         const sameName = function(a, b){ return (a.name || "").trim().toLowerCase() === (b.name || "").trim().toLowerCase(); };
         const clash = allForCheck.find(function(s){
@@ -3366,8 +3444,7 @@
         updateOutputCount();
         await renderMain();
       }
-      const all = await getAllStudents();
-      const removed = all.find(function(s){ return s.id === removedId; });
+      const removed = await getStudentById(removedId);
       const removedName = removed ? removed.name : "該學生";
       if(selectedIds.length === 0){
         awaitingOutputExitConfirm = true;
@@ -3850,6 +3927,7 @@
     const empty = document.getElementById("emptyState");
 
     if(!currentSchoolId){
+      bgSlotsRelease();   // 在選擇學校畫面時釋放背景方案快取
       title.textContent = schools.length ? "請選擇一個學校" : "尚未建立任何學校";
       sub.textContent = schools.length
         ? "點選左側任一學校，就能查看與新增底下的學生資料。"
@@ -3934,8 +4012,7 @@
 
     const attr = ATTRIBUTES.find(function(a){ return a.id === currentAttribute; });
     title.textContent = attr ? attr.name : "屬性";
-    const all = await getAllStudents();
-    let students = all.filter(function(s){ return s.attribute === currentAttribute; });
+    let students = await scanStudents(function(s){ return s.attribute === currentAttribute ? s : undefined; });
     const unfilteredCount = students.length;
     students = applyStudentSort(applyStudentFilter(students));
 
@@ -4005,9 +4082,7 @@
     const empty = document.getElementById("emptyState");
 
     const q = searchQuery.toLowerCase();
-    const all = await getAllStudents();
-    const rawMatches = all
-      .filter(function(s){ return (s.name || "").toLowerCase().includes(q) || (s.name2 || "").toLowerCase().includes(q); })
+    const rawMatches = (await scanStudents(function(s){ return ((s.name || "").toLowerCase().includes(q) || (s.name2 || "").toLowerCase().includes(q)) ? s : undefined; }))
       .sort(function(a,b){ return a.name.localeCompare(b.name, "zh-Hant"); });
     const matches = applyStudentFilter(rawMatches);
 
@@ -4045,10 +4120,7 @@
     setNormalControlsVisible(false, false, false);
 
     title.textContent = "已選清單：已選擇的角色";
-    const all = await getAllStudents();
-    const selected = selectedIds
-      .map(function(id){ return all.find(function(s){ return s.id === id; }); })
-      .filter(Boolean);
+    const selected = (await Promise.all(selectedIds.map(function(id){ return getStudentById(id); }))).filter(Boolean);
     sub.textContent = selected.length
       ? "點擊角色即可移除選取，共 " + selected.length + " 位。"
       : "目前沒有已選擇的角色，再點一次上方「已選擇」可返回瀏覽";
@@ -4680,7 +4752,7 @@
     await renderMain();
   }
   async function batchLoadTargets(){
-    return (await getAllStudents()).filter(function(s){ return batchIds.has(s.id) && !s.borrowed; });
+    return scanStudents(function(s){ return (batchIds.has(s.id) && !s.borrowed) ? s : undefined; });
   }
   // 逐位套用修改並存檔；成功後顯示可復原的提示
   async function batchCommit(targets, mutate, label){
@@ -6138,7 +6210,7 @@
       if(bgSlotBusy) return;
       bgSlotBusy = true;
       try{
-        await bgSlotsReady;
+        await bgSlotsEnsure();
         await fn();
       } catch(err){
         showToast("背景方案操作失敗，請再試一次");
@@ -6708,6 +6780,8 @@
   }
 
   function doOpenSettingsModal(carry){
+    // 背景方案快取若因閒置被釋放，先讀回來再開視窗（視窗裡的縮圖與切換方案都要用到）
+    if(bgSlotsReleased){ bgSlotsEnsure().then(function(){ doOpenSettingsModal(carry); }); return; }
     if(!carry) bgSlotsDiscardPending();   // 全新開啟：不帶入任何舊的方案暫存
     const draft = Object.assign({}, carry && carry.draft ? carry.draft : appSettings);
     function markDirty(){}
@@ -7655,13 +7729,13 @@
       if(!window.confirm("要把現有的 PNG／JPEG 卡片圖片轉換成 WebP 嗎？\n\n• 保留透明背景，只替換轉換後比較小的卡片圖片\n• WebP 是有損壓縮，轉換後無法還原成原圖\n• 會立即寫入資料庫，不需要按「儲存」\n\n建議先匯出備份。")) return;
       btn.disabled = true;
       try{
-        const all = await getAllStudents();
         const isConv = function(v){ return typeof v === "string" && /^data:image\/(png|jpeg);/.test(v); };
-        const targets = all.filter(function(st){ return isConv(st.avatar) || isConv(st.avatar2); });
+        const targets = await scanStudents(function(st){ return (isConv(st.avatar) || isConv(st.avatar2)) ? st.id : undefined; });
         let converted = 0, skipped = 0, savedBytes = 0;
         for(let i = 0; i < targets.length; i++){
           say("轉換中… " + (i + 1) + " / " + targets.length);
-          const st = targets[i];
+          const st = await getStudentById(targets[i]);   // 一次只載入一位，轉完就釋放
+          if(!st) continue;
           let changed = false;
           for(const field of ["avatar", "avatar2"]){
             if(!isConv(st[field])) continue;
@@ -7673,6 +7747,7 @@
               c.width = img.naturalWidth; c.height = img.naturalHeight;
               c.getContext("2d").drawImage(img, 0, 0);
               const webp = c.toDataURL("image/webp", 0.9);
+              c.width = c.height = 0;   // 釋放 canvas 的像素緩衝
               if(!/^data:image\/webp/.test(webp)){ say("此瀏覽器不支援輸出 WebP，無法轉換。"); btn.disabled = false; return; }
               if(webp.length < st[field].length){
                 savedBytes += st[field].length - webp.length;
@@ -9052,12 +9127,12 @@
       if(!confirm('確定要刪除組別「' + current.name + '」嗎？此組別中的其他角色會被移回「' + (currentBaseName || "組別1") + '」。')) return;
       const remaining = groups.filter(function(g){ return g.id !== current.id; });
       setVariantGroupsForBase(currentBaseName, remaining);
-      const all = await getAllStudents();
-      for(const s of all){
-        if(s.id !== st.id && effectiveGroupId(s) === current.id){
-          s.variantGroupId = null;
-          await putStudent(s);
-        }
+      const memberIds = await scanStudents(function(s){ return (s.id !== st.id && effectiveGroupId(s) === current.id) ? s.id : undefined; });
+      for(const mid of memberIds){
+        const s = await getStudentById(mid);
+        if(!s) continue;
+        s.variantGroupId = null;
+        await putStudent(s);
       }
       rawMatches = st.name ? await findRawVariantMatches(document.getElementById("f_name").value.trim(), st.id) : rawMatches;
       variantGroupId = null;
@@ -10299,7 +10374,7 @@
         await autosaveChain;
         // 存下最新的資料（含剛剛自動儲存的修改）放進最近刪除
         let snap = null;
-        try{ snap = (await getAllStudents()).find(function(x){ return x.id === st.id; }) || null; }catch(err){}
+        try{ snap = (await getStudentById(st.id)) || null; }catch(err){}
         const entry = { id: uid(), type: "student", name: st.name, deletedAt: Date.now(), student: snap || st };
         if(!(await moveToTrash(entry))){ autosaveStudentDeleted = false; return; }
         await deleteStudent(st.id);
@@ -13221,12 +13296,12 @@
       }),
       database: await diagSafe(async function(){
         const schools = await getAllSchools();
-        const students = await getAllStudents();
+        const students = await scanStudents(function(x){ return diagSanitize(x); });   // 逐筆精簡，不一次載入全部頭像
         return {
           name: DB_NAME, version: DB_VERSION,
           schoolCount: schools.length, studentCount: students.length,
           schools: schools.map(function(x){ return diagSanitize(x); }),
-          students: students.map(function(x){ return diagSanitize(x); })
+          students: students
         };
       }),
       presetsDb: await diagSafe(async function(){
@@ -13281,22 +13356,26 @@
       const c = document.createElement("canvas");
       c.width = img.naturalWidth; c.height = img.naturalHeight;
       c.getContext("2d").drawImage(img, 0, 0);
-      if(mode === "none") return c.toDataURL("image/png");
-      const w = c.toDataURL("image/webp", 0.9);
-      return /^data:image\/webp/.test(w) ? w : dataUrl;   // 不支援輸出 WebP 時保留原圖
+      let w;
+      if(mode === "none") w = c.toDataURL("image/png");
+      else { const webp = c.toDataURL("image/webp", 0.9); w = /^data:image\/webp/.test(webp) ? webp : dataUrl; }   // 不支援輸出 WebP 時保留原圖
+      c.width = c.height = 0;   // 釋放 canvas 的像素緩衝
+      return w;
     } catch(_){ return dataUrl; }
   }
 
   // 備份內容（匯出檔與雲端同步共用）。avMode：卡片圖片的匯出格式（none／keep／all）
   async function buildBackupPayload(avMode){
     const allSchools = await getAllSchools();
-    const allStudents = await Promise.all((await getAllStudents()).filter(function(s){ return !s.borrowed; }).map(async function(st){
-      if((!st.avatar && !st.avatar2) || (avMode !== "none" && avMode !== "all")) return st;
+    // 依序轉換（原本是全部同時轉，會同時開出一堆 canvas／Image，記憶體瞬間暴增）；順序與輸出內容不變
+    const allStudents = [];
+    for(const st of (await getAllStudents()).filter(function(s){ return !s.borrowed; })){
+      if((!st.avatar && !st.avatar2) || (avMode !== "none" && avMode !== "all")){ allStudents.push(st); continue; }
       const out = Object.assign({}, st);
       if(st.avatar) out.avatar = await convertAvatarForExport(st.avatar, avMode);
       if(st.avatar2) out.avatar2 = await convertAvatarForExport(st.avatar2, avMode);
-      return out;
-    }));
+      allStudents.push(out);
+    }
     const payload = {
       type: "ba-roster-backup", version: 3,
       exportedAt: new Date().toISOString(),
@@ -13421,7 +13500,7 @@
   // form); either way the dead field itself is removed so it doesn't keep
   // getting carried around (and re-exported in backups) forever.
   async function migrateLegacyVariantIndependent(){
-    const all = await getAllStudents();
+    const all = await scanStudents(function(s){ return ("variantIndependent" in s) ? s : undefined; });
     let changed = false;
     for(const s of all){
       if(!("variantIndependent" in s)) continue;
@@ -13482,7 +13561,7 @@
     return out;
   }
   async function exportSettingsFile(){
-    await bgSlotsReady;
+    await bgSlotsEnsure();
     const ls = {};
     settingsLocalKeys().forEach(function(k){ ls[k] = localStorage.getItem(k); });
     const slots = {};
@@ -13522,7 +13601,7 @@
       return;
     }
     try{
-      await bgSlotsReady;
+      await bgSlotsEnsure();
       for(let i = 1; i <= BG_SLOT_MAX; i++){
         if(slotNums.indexOf(i) >= 0) await bgSlotPut(i, bgSlotSnapshot(data.bgSlots[i]));
         else await bgSlotDelete(i);
