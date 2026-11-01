@@ -2730,13 +2730,86 @@
   let bgSlotsReady = bgSlotsLoad();
   // 回到「選擇學校」畫面時釋放 6 個背景方案的快取（每個都是整張圖的 data URL），
   // 這時用不到它們；下次需要時（開設定視窗、切換方案、匯出／匯入設定）再用 bgSlotsEnsure() 從 IndexedDB 讀回來。
-  function bgSlotsRelease(){
-    if(!bgSlotsLoaded || bgSlotsReleased) return;
-    if(Object.keys(bgSlotPending).length) return;           // 有尚未儲存的方案：不動
-    if(document.getElementById("st_bgOpacity")) return;     // 設定視窗開著：不動
+  function bgSlotsRelease(force){
+    if(!bgSlotsLoaded || bgSlotsReleased) return false;
+    if(Object.keys(bgSlotPending).length) return false;                  // 有尚未儲存的方案：不動
+    if(!force && document.getElementById("st_bgOpacity")) return false;  // 設定視窗開著：不動（手動清除快取時 force = true）
     let any = false;
     Object.keys(bgSlotCache).forEach(function(k){ delete bgSlotCache[k]; any = true; });
     if(any) bgSlotsReleased = true;
+    return any;
+  }
+  // 是否正停在「請選擇一個學校」畫面（和 renderMain 判斷的順序一致）
+  function isSchoolPickerShowing(){
+    return !(outputMode && deselectMode) && !searchQuery && sidebarTab !== "attribute" &&
+           currentSchoolId !== "__ALL__" && !currentSchoolId;
+  }
+  // 設定 › 匯出與備份 › 清除快取：只釋放記憶體裡的暫存，不動任何資料；需要時會自動重新載入
+  // 估算物件裡文字資料的大小（背景方案與角色頭像都是 data URL，幾乎就是它們佔的記憶體；只是估計值）
+  function estimateBytes(v){
+    if(typeof v === "string") return v.length;
+    if(!v || typeof v !== "object") return 0;
+    let n = 0;
+    Object.keys(v).forEach(function(k){ n += estimateBytes(v[k]); });
+    return n;
+  }
+  function formatBytes(n){
+    if(n < 1024) return "不到 1 KB";
+    if(n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    return (n / 1024 / 1024).toFixed(1) + " MB";
+  }
+  function clearRuntimeCaches(){
+    const done = [];
+    let bytes = 0;
+    const hadPending = Object.keys(bgSlotPending).length > 0;
+    if(Object.keys(bgSlotCache).length && !hadPending){
+      const b = estimateBytes(bgSlotCache);
+      if(bgSlotsRelease(true)){ done.push("背景方案圖片"); bytes += b; }
+    }
+    // 角色清單暫存只在選擇學校畫面（畫面上沒有卡片）時清；有卡片時它還要給「上一位／下一位」切換用
+    if(isSchoolPickerShowing() && currentGridStudents.length){
+      bytes += estimateBytes(currentGridStudents);
+      currentGridStudents = [];
+      done.push("角色清單暫存");
+    }
+    return { done: done, skippedPending: hadPending, bytes: bytes };
+  }
+  // 設定 › 匯出與備份 › 初始化設定：把所有設定（含背景圖片與背景方案）還原成預設值。
+  // 範圍和「匯出設定／匯入設定」一致（settingsLocalKeys + 背景方案），學生與學校資料、最近刪除、簡寫清單、變體分組、雲端同步設定都不動。
+  async function resetAllSettings(){
+    const ok = await askDialog({
+      title: "⚠️ 初始化設定",
+      message: "這會把所有設定還原成預設值，而且無法復原：\n\n" +
+        "• 外觀、主題、排序、篩選、卡片顯示等所有設定\n" +
+        "• 背景圖片與全部 " + BG_SLOT_MAX + " 個背景方案\n" +
+        "• 標題圖示、技能優先級輸出圖的背景與浮水印設定\n\n" +
+        "不會受影響：學生與學校資料、最近刪除、簡寫清單、變體分組、雲端同步設定。\n\n" +
+        "建議先到「設定備份」按「匯出」存一份。完成後頁面會自動重新載入。\n\n" +
+        "確定要初始化嗎？",
+      buttons: [
+        { label: "取消", kind: "ghost", value: false },
+        { label: "初始化設定", kind: "danger", value: true }
+      ],
+      cancelValue: false,
+      focusIndex: 0      // 預設停在「取消」，避免誤按 Enter
+    });
+    if(!ok) return;
+    let slotFail = false;
+    try{
+      await bgSlotsEnsure();
+      for(let i = 1; i <= BG_SLOT_MAX; i++){
+        try{ await bgSlotDelete(i); }catch(_){ slotFail = true; }
+      }
+      bgSlotsDiscardPending();
+    }catch(_){ slotFail = true; }
+    try{
+      settingsLocalKeys().forEach(function(k){ localStorage.removeItem(k); });
+    }catch(_){
+      alert("初始化失敗：無法清除瀏覽器儲存的設定，目前設定保持原樣。");
+      return;
+    }
+    if(slotFail) alert("設定已初始化，但部分背景方案無法清除，重新載入後請再確認。");
+    location.reload();
   }
   function bgSlotsEnsure(){
     if(bgSlotsReleased){
@@ -4937,6 +5010,13 @@
   // ---------- 自訂確認對話框（取代原生 confirm / alert，按鈕文字清楚、可有多個選項） ----------
   // buttons: [{ label, value, kind: "primary" | "danger" | undefined }]，由左到右顯示。
   // 按 Esc 或點背景 = 回傳 cancelValue。focusIndex 指定預設聚焦的按鈕（破壞性操作請放在取消上）。
+  // 對焦到文字欄位並把游標放在最後面。
+  // 只呼叫 focus() 時，欄位已有內容的話游標會停在最前面，使用者一打字就變成從左邊開始。
+  function focusAtEnd(el){
+    if(!el) return;
+    el.focus();
+    try{ const n = (el.value || "").length; el.setSelectionRange(n, n); }catch(_){}
+  }
   function askDialog(opts){
     return new Promise(function(resolve){
       const buttons = opts.buttons || [];
@@ -5965,7 +6045,7 @@
               '<button type="button" class="btn btn-sm theme-opt' + (draft.quickAffBtn === false ? " active" : "") + '" id="st_quickAffOff">關閉</button>' +
             '</div>' +
           '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">卡片顯示為「好感度」時，卡片兩側的 −／+ 快捷按鈕。關閉後仍可在編輯視窗調整好感度。</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">卡片兩側的 −／+ 快捷按鈕（卡片顯示「好感度」時）。關閉後仍可在編輯視窗調整。</div>' +
           '<div class="fieldset-title">卡片名條顏色</div>' +
           '<div class="field">' +
             '<label>名條底色</label>' +
@@ -5988,7 +6068,7 @@
               '<button type="button" class="btn btn-sm theme-opt' + (!draft.attributePosterTextGlow ? " active" : "") + '" id="st_attrPosterGlowOff">關閉</button>' +
             '</div>' +
           '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">屬性顯示切成「海報樣式」時，文字周圍是否保留深色模糊底，讓文字在圖示上更容易辨識。</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">「海報樣式」下，文字後面是否保留深色底，讓文字更好讀。</div>' +
         '</div>'
       : '') +
       '<div id="categoryListPanel" style="display:none">' +
@@ -6047,7 +6127,7 @@
               '<button type="button" class="btn btn-sm theme-opt' + (!draft.ovHideAttrArmor ? " active" : "") + '" id="st_ovHideAttrOff">否</button>' +
             '</div>' +
           '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">小視窗：滑鼠移到卡片圖片下方的屬性或裝甲圖示上，即開啟屬性／裝甲小視窗（手機點按）。頁面：點圖示切到「屬性與裝甲」分頁。</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">小視窗：移到圖示上開啟（手機點按）。頁面：點圖示切到「屬性與裝甲」分頁。</div>' +
           '<div class="fieldset-title">卡片圖片左下角標</div>' +
           '<div class="field no-divider">' +
             '<label>顯示內容</label>' +
@@ -6154,6 +6234,7 @@
     // ---- 背景圖片方案 ----
     function renderBgSlotRow(){
       if(!bgSlotRow) return;
+      if(bgSlotsReleased){ bgSlotsEnsure().then(function(){ renderBgSlotRow(); }); }   // 快取被清除過：先讀回來，縮圖稍後補上
       bgSlotRow.style.display = activeImageTab === "bg" ? "" : "none";
       const idx = Math.max(1, Math.min(BG_SLOT_MAX, draft.bgSlotIdx || 1));
       let h = '<div class="bg-slot-label">背景方案</div><div class="bg-slot-chips">';
@@ -6887,7 +6968,7 @@
             '<button type="button" class="btn btn-sm theme-opt' + (!draft.eyeCareLockParams ? " active" : "") + '" id="st_eyeCareLockOff">不鎖定</button>' +
             '<button type="button" class="btn btn-sm theme-opt' + (draft.eyeCareLockParams ? " active" : "") + '" id="st_eyeCareLockOn">鎖定</button>' +
           '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">護眼模式期間，背景圖片的透明度、亮度、模糊度、飽和度、疊加色暫時鎖定（數值保留，關閉後恢復）。</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">護眼模式期間，背景的各項調整暫時鎖定，關閉後恢復原本的數值。</div>' +
           '<div class="fieldset-title">介面密度</div>' +
           '<div class="theme-toggle-row">' +
             '<button type="button" class="btn btn-sm theme-opt' + (draft.density === "compact" ? " active" : "") + '" id="st_densityCompact">緊湊</button>' +
@@ -6977,7 +7058,7 @@
             '<button type="button" class="btn btn-sm theme-opt" id="st_syncCheckOff">關閉</button>' +
             '<button type="button" class="btn btn-sm theme-opt" id="st_syncCheckOn">開啟</button>' +
           '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">打開網頁或切回分頁時查一次雲端，有新版本會在下方提示，由你決定是否拉取。</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">打開網頁或切回分頁時，自動檢查雲端有沒有新版本，有的話會在下方提示。</div>' +
           '<div class="fieldset-title">從雲端拉取前，先下載本機備份？</div>' +
           '<div class="theme-toggle-row bk-opts" style="flex-wrap:wrap;">' +
             '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkNever">不下載</button>' +
@@ -6985,7 +7066,7 @@
             '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkEdit">僅學生資料不同時不下載</button>' +
             '<button type="button" class="btn btn-sm theme-opt" id="st_syncBkAlways">永遠下載</button>' +
           '</div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">決定拉取（會取代這台資料）前要不要先下載本機備份。「僅學生資料不同」：差異只在學生編輯視窗的內容時不下載；學校、簡寫清單、群組有差異，或學生人數不同仍會下載。</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">拉取前是否先下載備份。「僅學生資料不同」：只有學生內容有差異時不下載。</div>' +
           '<div class="fieldset-title">除錯功能</div>' +
           '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
             '<button type="button" class="btn btn-sm" id="btnHtmlRepoInfo" title="查看放這個網頁（HTML 檔）的 GitHub 倉庫目前多大、有幾筆歷史">網頁倉庫大小</button>' +
@@ -7026,14 +7107,28 @@
               '<input type="file" id="settingsImportInput" accept=".gz,.json,application/json,application/gzip" hidden>' +
             '</div>' +
           '</div>' +
-          '<div class="variant-group-note">匯出所有設定與圖片（含背景圖片、各背景方案），不含學生資料與 token。匯入會取代目前設定並重新載入。</div>' +
+          '<div class="variant-group-note">匯出所有設定與圖片（含背景方案），不含學生資料和雲端同步設定。匯入會取代現有設定。</div>' +
           '<div class="setting-row">' +
             '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg></span><div class="fieldset-title">除錯資料</div></div>' +
             '<div class="field" style="display:flex; gap:6px;">' +
               '<button type="button" class="btn btn-sm bkp-btn" id="btnExportDiag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>匯出</button>' +
             '</div>' +
           '</div>' +
-          '<div class="variant-group-note">遇到問題要回報時使用：匯出瀏覽器資訊、設定、資料庫內容和最近的錯誤記錄。不含任何圖片，檔案是可直接開啟的 JSON。</div>' +
+          '<div class="variant-group-note">回報問題時使用：匯出設定、資料和最近的錯誤記錄（不含圖片）。</div>' +
+          '<div class="setting-row">' +
+            '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg></span><div class="fieldset-title">清除快取</div></div>' +
+            '<div class="field" style="display:flex; gap:6px;">' +
+              '<button type="button" class="btn btn-sm bkp-btn" id="btnClearCache"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>清除</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="variant-group-note">釋放記憶體暫存，不會刪除任何資料，需要時自動重新載入。</div>' +
+          '<div class="setting-row">' +
+            '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span><div class="fieldset-title">初始化設定</div></div>' +
+            '<div class="field" style="display:flex; gap:6px;">' +
+              '<button type="button" class="btn btn-sm bkp-btn btn-danger" id="btnResetSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>初始化</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="variant-group-note">所有設定（含背景圖片）還原成預設，學生與學校資料不受影響。</div>' +
           '<div class="fieldset-title">儲存空間</div>' +
           '<div class="storage-usage-box" id="storageUsageBox">' +
             '<div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width:0%;"></div></div>' +
@@ -7056,7 +7151,7 @@
           '<div class="variant-group-note" id="avExpNote" style="margin-top:-6px;">' + AV_EXPORT_NOTES[avExportMode(draft)] + '</div>' +
           '<div class="fieldset-title">現有卡片圖片轉成 <span style="text-transform:none">WebP</span></div>' +
           '<div class="field"><button type="button" class="btn btn-sm" id="btnAvatarToWebp">開始轉換</button></div>' +
-          '<div class="variant-group-note" style="margin-top:-6px;">把已存的 PNG／JPEG 轉成 WebP 以省空間（保留透明，無法還原）。立即生效，不需按「儲存」。</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">把已存的卡片圖片轉成更省空間的格式（保留透明），無法還原。立即生效，不需按「儲存」。</div>' +
           '<div id="avatarToWebpStatus" style="display:none; font-size:12.5px; color:var(--ink-soft); margin:-4px 0 12px;"></div>' +
         '</div>' +
       '</div>' +
@@ -7536,6 +7631,17 @@
       document.getElementById("btnSettingsImport").addEventListener("click", function(){ fi.click(); });
       fi.addEventListener("change", function(){ const f = fi.files && fi.files[0]; fi.value = ""; if(f) importSettingsFile(f); });
     })();
+
+    // 清除快取／初始化設定：按鈕直接執行，不經過設定的「儲存」
+    document.getElementById("btnClearCache").addEventListener("click", function(){
+      const r = clearRuntimeCaches();
+      let msg;
+      if(r.done.length) msg = "已清除快取，預計釋放" + (r.bytes < 1024 ? "不到 1 KB" : "約 " + formatBytes(r.bytes)) + (r.skippedPending ? "；背景方案有未儲存的修改，已略過" : "");
+      else if(r.skippedPending) msg = "背景方案有未儲存的修改，已略過；沒有其他可清除的快取";
+      else msg = "目前沒有需要清除的快取";
+      showToast(msg);
+    });
+    document.getElementById("btnResetSettings").addEventListener("click", function(){ resetAllSettings(); });
 
     // 雲端同步：欄位一改就存到這台裝置；按鈕直接執行，不經過設定的「儲存」
     (function setupCloudSync(){
@@ -10100,7 +10206,7 @@
     }
 
     document.getElementById("f_name2").addEventListener("change", scheduleVariantBoxRender);
-    document.getElementById("f_name").focus();
+    focusAtEnd(document.getElementById("f_name"));
     document.getElementById("f_name").addEventListener("change", async function(){
       const nameNow = this.value.trim();
       const newBaseName = getBaseVariantName(nameNow);
@@ -10388,7 +10494,7 @@
 
     document.getElementById("confirmStudent").addEventListener("click", async function(){
       const updated = collectStudentFromForm();
-      if(!updated){ document.getElementById("f_name").focus(); return; }
+      if(!updated){ focusAtEnd(document.getElementById("f_name")); return; }
       const name = updated.name;
       const finalGroupId = updated.variantGroupId;
       if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer = null; }
@@ -10889,7 +10995,7 @@
       '<div class="export-avatar-row" id="exportAvatarRow"></div>' +
       '<div class="export-page-tabs" id="exportPageTabs"></div>' +
       '<div id="spPane" style="display:none">' +
-        '<div class="variant-group-note" style="text-align:center;">依點選順序決定起手手牌的技能（最多 ' + spMaxN + ' 位）。未點選的排在後面，長按卡片圖片可拖曳排序。</div>' +
+        '<div class="variant-group-note" style="text-align:center;">依點選順序決定起手技能（最多 ' + spMaxN + ' 位），未點選的排後面；長按圖片可拖曳排序。</div>' +
         '<div class="export-avatar-row sp-pick-row" id="spPickRow"></div>' +
       '</div>' +
       '<pre class="export-text" id="exportTextBox"></pre>' +
@@ -12123,7 +12229,7 @@
           '<button type="button" class="btn btn-sm theme-opt' + on(!c.outputFormPersist) + '" id="' + p + 'formPersistOff">只影響這次輸出</button>' +
           '<button type="button" class="btn btn-sm theme-opt' + on(!!c.outputFormPersist) + '" id="' + p + 'formPersistOn">同時儲存為預設</button>' +
         '</div>' +
-        '<div class="variant-group-note" style="margin-top:-6px;">在輸出視窗點頭像右上角的 1／2 切換形態時：前者關掉視窗就恢復；後者會改寫角色的預設形態，主畫面卡片也會跟著換。</div>' +
+        '<div class="variant-group-note" style="margin-top:-6px;">切換形態時：前者關閉視窗就恢復；後者會把預設形態改掉，主畫面也跟著換。</div>' +
         '<div class="fieldset-title sp-text-only">技能優先級：文字輸出的名字顯示</div>' +
         '<div class="theme-toggle-row sp-text-only">' +
           '<button type="button" class="btn btn-sm theme-opt' + on(c.skillPrioNameStyle !== "full") + '" id="' + p + 'spNamePrefix">前綴＋名字</button>' +
@@ -12182,7 +12288,7 @@
           '<div data-sp-prev-title style="font-size:30px;font-weight:800;line-height:1.3;"></div>' +
           '<div data-sp-prev-num style="font-size:26px;font-weight:900;line-height:1.3;letter-spacing:.08em;margin-top:2px;">1 2 3 4 5 6 7 8 9 10</div>' +
         '</div>' +
-        '<div class="variant-group-note" style="margin-top:-2px;">標題與數字可分開選擇。標記「僅英文／數字」的字體沒有中文字，中文標題會改用系統字體。</div>' +
+        '<div class="variant-group-note" style="margin-top:-2px;">標題與數字可分開選。標「僅英文／數字」的字體不含中文，中文會改用系統字體。</div>' +
       '</div>';
   }
 
