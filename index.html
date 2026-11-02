@@ -502,7 +502,12 @@
   }
   .avatar-card img{ width:100%; height:100%; object-fit:cover; display:block; transition: transform .25s ease; -webkit-user-drag:none; }
   .avatar-card:hover img{ transform: scale(1.1); }
+  /* 拖曳中：換位置時卡片會被移動（等於重新放下），滑鼠懸停狀態會瞬間消失又回來，
+     圖片的放大效果就會一直重播。拖曳期間固定圖片大小、不做過渡。 */
+  .avatar-card.dragging img, .avatar-card.dragging:hover img{ transform:none !important; transition:none !important; }
   .avatar-card .ph{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:800; color:var(--muted-icon); }
+  .avatar-card.school-card .ph{ color:#fff; font-size:36px; }
+  body.school-icon-blackbg .avatar-card.school-card img{ background:#000; }
   .avatar-card .badge-level{ position:absolute; top:5px; right:5px; background:rgba(28,37,65,.72); color:#fff; font-family:var(--mono); font-size:10.5px; font-weight:700; padding:2px 6px; border-radius:6px; }
   .avatar-card .badge-borrowed{ position:absolute; top:5px; left:5px; background:rgba(28,37,65,.72); color:#7FD1C7; font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; }
   body.corner-sharp .avatar-card .badge-borrowed{ border-radius:3px !important; }
@@ -2152,7 +2157,7 @@
     titleIconSize: { label: "標題圖示大小", map: { small: "小", medium: "中", large: "大" } },
     titleIconShape: { label: "標題圖示形狀", map: { rounded: "圓角", circle: "圓形", square: "方形" } },
     titleIconBlackBg: { label: "標題圖示黑色背景", bool: ["關閉", "開啟"] },
-    titleClickAction: { label: "標題點擊行為", map: { allStudents: "回到所有學生", schoolPicker: "回到選擇學校畫面", none: "不做任何事" } },
+    titleClickAction: { label: "標題點擊行為", map: { allStudents: "回到所有學生", schoolPicker: "回到選擇學校畫面", schoolPickerCards: "回到選擇學校畫面（含學校卡片）", none: "不做任何事" } },
     affinityLockIcon: { label: "好感度封頂顯示", bool: ["普通愛心", "鎖頭樣式"] },
     quickAffBtn: { label: "快捷好感度按鈕", bool: ["關閉", "開啟"] },
     batchEditBtn: { label: "批量編輯按鈕", bool: ["關閉", "開啟"] },
@@ -2612,7 +2617,7 @@
       if(s.titleClickAction === "none"){
         appTitleEl.title = "";
         appTitleEl.style.cursor = "default";
-      } else if(s.titleClickAction === "schoolPicker"){
+      } else if(s.titleClickAction === "schoolPicker" || s.titleClickAction === "schoolPickerCards"){
         appTitleEl.title = "選擇學校";
         appTitleEl.style.cursor = "pointer";
       } else {
@@ -3103,21 +3108,159 @@
     }
   }
 
-  async function persistSchoolOrder(){
-    const list = document.getElementById("schoolList");
-    if(!list) return;
-    const ids = Array.from(list.querySelectorAll(".school-item[data-school-id]")).map(function(el){ return el.dataset.schoolId; });
+  // idsOverride：從學校卡片拖曳時，直接給卡片目前的順序；沒給就讀側邊欄目前的順序
+  async function persistSchoolOrder(idsOverride){
+    let ids = idsOverride;
+    if(!ids){
+      const list = document.getElementById("schoolList");
+      if(!list) return;
+      ids = Array.from(list.querySelectorAll(".school-item[data-school-id]")).map(function(el){ return el.dataset.schoolId; });
+    }
     const touched = [];
     ids.forEach(function(id, idx){
       const sch = schools.find(function(s){ return s.id === id; });
       if(sch && sch.order !== idx){ sch.order = idx; touched.push(sch); }
     });
+    syncSchoolCardOrder();   // 畫面上若正顯示學校卡片，卡片順序跟著側邊欄變
     for(const sch of touched){
       try{ await putSchool(sch); } catch(e){ /* ignore */ }
     }
   }
 
   let schoolDragActive = false;
+
+  // 讓畫面上的學校卡片順序和側邊欄一致（排序方式、拖曳、新增學校後都會呼叫）。
+  // 只移動既有卡片、不重建，順序已經對的話什麼都不做。
+  function syncSchoolCardOrder(){
+    const grid = document.getElementById("studentGrid");
+    if(!grid) return;
+    const cards = Array.from(grid.querySelectorAll(".school-card[data-school-id]"));
+    if(!cards.length) return;
+    const byId = {};
+    cards.forEach(function(c){ byId[c.dataset.schoolId] = c; });
+    const wanted = orderedSchools().map(function(s){ return byId[s.id]; }).filter(Boolean);
+    const same = wanted.length === cards.length && wanted.every(function(c, i){ return c === cards[i]; });
+    if(same) return;
+    wanted.forEach(function(c){ c.style.animation = "none"; grid.appendChild(c); });   // 取消進場動畫，免得重新插入時又閃一次
+  }
+
+  // 學校卡片的拖曳排序（和側邊欄共用同一份順序 school.order；只有排序方式為「自訂」時可拖曳）
+  function makeSchoolCardDraggable(card, school){
+    let dragMode = false;
+    let moved = false;
+    let activePointerId = null;
+    let startX = 0, startY = 0;
+    let longPressTimer = null;
+    const DRAG_THRESHOLD = 6;
+    const LONG_PRESS_MS = 150;
+    let rafPending = false;
+    let lastMoveEvent = null;
+    let grabOffsetX = 0, grabOffsetY = 0;
+
+    function beginDragMode(){
+      if(dragMode) return;
+      if(schoolDragActive) return;
+      schoolDragActive = true;
+      dragMode = true;
+      moved = true;
+      card.style.animation = "none";
+      card.classList.add("dragging");
+    }
+    function isBefore(px, py, r){
+      if(py < r.top) return true;
+      if(py > r.bottom) return false;
+      return px < r.left + r.width / 2;
+    }
+    function processDragMove(e){
+      const grid = document.getElementById("studentGrid");
+      if(!grid) return;
+      const allItems = Array.from(grid.querySelectorAll(".school-card[data-school-id]"));
+      allItems.forEach(function(el){ el.style.transition = "none"; el.style.transform = ""; });
+      const oldRects = new Map();
+      allItems.forEach(function(el){ oldRects.set(el, el.getBoundingClientRect()); });
+      const others = allItems.filter(function(b){ return b !== card; });
+      let target = null;
+      for(const sib of others){
+        if(isBefore(e.clientX, e.clientY, sib.getBoundingClientRect())){ target = sib; break; }
+      }
+      let changed = false;
+      if(target){
+        if(target !== card.nextSibling){ grid.insertBefore(card, target); changed = true; }
+      } else if(grid.lastElementChild !== card){ grid.appendChild(card); changed = true; }
+      if(changed){
+        allItems.forEach(function(el){
+          if(el === card) return;
+          const o = oldRects.get(el), n = el.getBoundingClientRect();
+          const dx = o.left - n.left, dy = o.top - n.top;
+          if((dx || dy) && motionOn("reorder")){
+            el.style.transition = "none";
+            el.style.transform = "translate(" + dx + "px, " + dy + "px)";
+            requestAnimationFrame(function(){ el.style.transition = "transform .15s ease"; el.style.transform = ""; });
+          }
+        });
+      }
+      const nat = card.getBoundingClientRect();
+      card.style.transform = "translate(" + ((e.clientX - grabOffsetX) - nat.left) + "px, " + ((e.clientY - grabOffsetY) - nat.top) + "px) scale(1.04)";
+    }
+    function onDocPointerMove(e){
+      if(e.pointerId !== activePointerId) return;
+      lastMoveEvent = e;
+      if(!dragMode){
+        if(Math.abs(e.clientX - startX) > DRAG_THRESHOLD || Math.abs(e.clientY - startY) > DRAG_THRESHOLD){
+          clearTimeout(longPressTimer);
+          beginDragMode();
+        } else return;
+      }
+      if(rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(function(){
+        rafPending = false;
+        if(!dragMode) return;
+        if(lastMoveEvent) processDragMove(lastMoveEvent);
+      });
+    }
+    async function onDocPointerUp(e){
+      if(e.pointerId !== activePointerId) return;
+      clearTimeout(longPressTimer);
+      const wasDragging = dragMode;
+      dragMode = false;
+      activePointerId = null;
+      card.classList.remove("dragging");
+      card.dataset.dragMoved = wasDragging && moved ? "1" : "0";   // 讓 click 知道這次是拖曳，不要開啟學校
+      card.style.transition = "";
+      card.style.transform = "";
+      document.removeEventListener("pointermove", onDocPointerMove);
+      document.removeEventListener("pointerup", onDocPointerUp);
+      document.removeEventListener("pointercancel", onDocPointerUp);
+      if(wasDragging){ schoolDragActive = false; }
+      if(wasDragging && moved){
+        const grid = document.getElementById("studentGrid");
+        const ids = grid ? Array.from(grid.querySelectorAll(".school-card[data-school-id]")).map(function(el){ return el.dataset.schoolId; }) : [];
+        if(ids.length){
+          await persistSchoolOrder(ids);
+          renderSchoolList();   // 側邊欄跟著更新
+        }
+      }
+    }
+    card.addEventListener("pointerdown", function(e){
+      if(schoolDragActive) return;
+      if(schoolSortMode !== "custom") return;     // 依名稱／人數排序時不能拖曳（和側邊欄一樣）
+      e.preventDefault();                          // 避免瀏覽器自己的圖片／文字選取拖曳
+      dragMode = false;
+      moved = false;
+      activePointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      const r = card.getBoundingClientRect();
+      grabOffsetX = e.clientX - r.left;
+      grabOffsetY = e.clientY - r.top;
+      document.addEventListener("pointermove", onDocPointerMove);
+      document.addEventListener("pointerup", onDocPointerUp);
+      document.addEventListener("pointercancel", onDocPointerUp);
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(beginDragMode, LONG_PRESS_MS);
+    });
+  }
 
   function makeSchoolItemDraggable(li, school){
     li.dataset.schoolId = school.id;
@@ -3356,6 +3499,7 @@
 
     const activeItem = list.querySelector(".school-item.active");
     if(activeItem) list.scrollTop = activeItem.offsetTop - list.clientHeight / 2 + activeItem.offsetHeight / 2;
+    syncSchoolCardOrder();   // 側邊欄排序方式／順序變了，畫面上的學校卡片也跟著
   }
 
   async function refreshCounts(){
@@ -4001,14 +4145,24 @@
 
     if(!currentSchoolId){
       bgSlotsRelease();   // 在選擇學校畫面時釋放背景方案快取
+      // 點擊行為選了「回到選擇學校畫面（含學校卡片）」時，這個畫面會直接列出學校卡片
+      const showSchoolCards = appSettings.titleClickAction === "schoolPickerCards" && schools.length > 0;
       title.textContent = schools.length ? "請選擇一個學校" : "尚未建立任何學校";
-      sub.textContent = schools.length
-        ? "點選左側任一學校，就能查看與新增底下的學生資料。"
-        : "先建立第一個學校，之後就能把學生歸類進去。";
-      grid.innerHTML = "";
+      sub.textContent = showSchoolCards
+        ? "點選學校卡片，查看該學校的學生或新增學生。"
+        : (schools.length
+          ? "點選左側任一學校，就能查看與新增底下的學生資料。"
+          : "先建立第一個學校，之後就能把學生歸類進去。");
+      const keepSchoolCards = showSchoolCards && schoolCardsUnchanged(grid);
+      if(!keepSchoolCards) grid.innerHTML = "";
       lastGridViewKey = null;
       setViewControlsVisible(false, false);
       setNormalControlsVisible(false, false, false);
+      if(showSchoolCards){
+        empty.style.display = "none";
+        if(!keepSchoolCards) renderSchoolCards(grid);
+        return;
+      }
       empty.style.display = "block";
       empty.innerHTML = schools.length
         ? "<h3>從左側選擇一個學校</h3><p>點選左側任一學校，就能查看與新增底下的學生資料。</p>"
@@ -4343,6 +4497,7 @@
       deselectDragActive = true;
       dragMode = true;
       moved = true;
+      card.style.animation = "none";   // 換位置時卡片會被重新插入，不關掉的話進場動畫每次都會重播（小彈跳）
       card.classList.add("dragging");
     }
 
@@ -4473,6 +4628,55 @@
       clearTimeout(longPressTimer);
       longPressTimer = setTimeout(beginDragMode, LONG_PRESS_MS);
     });
+  }
+
+  // 學校卡片：樣式沿用學生卡片，順序跟左邊側邊欄一致（orderedSchools）
+  // 學校卡片的「內容指紋」：順序、校名、人數、圖示、能否拖曳都一樣就代表不用重畫
+  function schoolCardKey(s){
+    const ic = s.icon || "";
+    return [s.id, schools.indexOf(s), s.name, s.count || 0, ic.length, ic.slice(-24)].join("|");
+  }
+  function schoolCardsSignature(){
+    return (schoolSortMode === "custom" && schools.length > 1 ? "D" : "-") + "#" +
+      orderedSchools().map(schoolCardKey).join("\n");
+  }
+  // 畫面上已經是這組學校卡片的話回傳 true：重畫（例如按 Ctrl+Z 取消選取）時保留原卡片，
+  // 免得每次都整排重建、重播進場動畫而一直抖動。
+  // 指紋直接從畫面上現有卡片（各自記錄的 data-key，依目前排列順序）算出來，所以拖曳換順序後也不會過期。
+  function schoolCardsUnchanged(grid){
+    const cards = Array.from(grid.querySelectorAll(".school-card[data-key]"));
+    if(!cards.length) return false;
+    const domSig = (grid.dataset.schoolCardsDrag || "-") + "#" + cards.map(function(c){ return c.dataset.key; }).join("\n");
+    return domSig === schoolCardsSignature();
+  }
+
+  function renderSchoolCards(grid){
+    const draggable = schoolSortMode === "custom" && schools.length > 1;
+    grid.classList.toggle("reorderable-grid", draggable);
+    orderedSchools().forEach(function(school){
+      const idx = schools.indexOf(school);
+      const card = document.createElement("div");
+      card.className = "avatar-card school-card";
+      card.dataset.schoolId = school.id;
+      card.dataset.key = schoolCardKey(school);
+      card.title = school.name;
+      card.innerHTML =
+        (school.icon
+          ? '<img src="' + school.icon + '" alt="' + escapeHtml(school.name) + '" draggable="false">'
+          : '<div class="ph" style="background:' + swatchFor(idx) + ';">' + escapeHtml((school.name || "?").slice(0, 1)) + '</div>') +
+        '<span class="badge-level">' + (school.count ?? 0) + ' 位</span>' +
+        '<span class="name-tag">' + escapeHtml(school.name) + '</span>';
+      card.addEventListener("click", function(){
+        if(card.dataset.dragMoved === "1"){ card.dataset.dragMoved = "0"; return; }   // 剛拖曳完，不開啟學校
+        selectSchool(school.id);
+      });
+      if(draggable){
+        card.classList.add("reorderable");
+        makeSchoolCardDraggable(card, school);
+      }
+      grid.appendChild(card);
+    });
+    grid.dataset.schoolCardsDrag = draggable ? "D" : "-";
   }
 
   function renderStudentCard(st, opts){
@@ -5219,7 +5423,7 @@
       if(!items.length){ listEl.innerHTML = '<div class="trash-empty">沒有最近刪除的項目</div>'; return; }
       listEl.innerHTML = items.map(function(it){
         const left = Math.max(0, Math.ceil(TRASH_KEEP_DAYS - (Date.now() - it.deletedAt) / 86400000));
-        const kind = it.type === "school" ? "學校" : "學生";
+        const kind = it.type === "school" ? "學校" : ((it.type === "student" && it.student && it.student.borrowed) ? "借用學生" : "學生");
         const extra = it.type === "school" ? "含 " + (it.students || []).length + " 位學生 · "
                     : (it.type === "students" ? "共 " + (it.students || []).length + " 位 · " : "");
         return '<div class="trash-row" data-id="' + escapeHtml(it.id) + '">' +
@@ -5264,8 +5468,9 @@
       });
       if(!v) return;
       try{ await trashTx("readwrite", function(st){ st.clear(); }); items = []; }
-      catch(err){ showToast("清空失敗"); }
-      draw();
+      catch(err){ showToast("清空失敗"); draw(); return; }
+      closeTrash();                      // 清空後直接關閉「最近刪除」
+      showToast("已清空最近刪除");
     });
     const cb = back.querySelector('[data-role="close"]'); if(cb) cb.focus();
   }
@@ -5989,8 +6194,9 @@
           '<div class="variant-group-note" style="margin-top:-6px;">方便白色線條圖示在淺色模式下也能清楚顯示。</div>' +
           '<div class="fieldset-title">點擊行為</div>' +
           '<div class="field"><select id="st_titleClickAction">' +
-            '<option value="allStudents"' + (draft.titleClickAction !== "schoolPicker" && draft.titleClickAction !== "none" ? " selected" : "") + '>回到所有學生</option>' +
+            '<option value="allStudents"' + (draft.titleClickAction !== "schoolPicker" && draft.titleClickAction !== "schoolPickerCards" && draft.titleClickAction !== "none" ? " selected" : "") + '>回到所有學生</option>' +
             '<option value="schoolPicker"' + (draft.titleClickAction === "schoolPicker" ? " selected" : "") + '>回到選擇學校畫面</option>' +
+            '<option value="schoolPickerCards"' + (draft.titleClickAction === "schoolPickerCards" ? " selected" : "") + '>回到選擇學校畫面（含學校卡片）</option>' +
             '<option value="none"' + (draft.titleClickAction === "none" ? " selected" : "") + '>不做任何事</option>' +
           '</select></div>' +
         '</div>' +
@@ -14779,7 +14985,7 @@
 
   document.getElementById("appTitle").addEventListener("click", function(){
     if(appSettings.titleClickAction === "none") return;
-    if(appSettings.titleClickAction === "schoolPicker") return goToSchoolPicker();
+    if(appSettings.titleClickAction === "schoolPicker" || appSettings.titleClickAction === "schoolPickerCards") return goToSchoolPicker();
     return goToAllStudents();
   });
 
