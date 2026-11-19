@@ -163,7 +163,11 @@
   /* 對話框寬度依最長一行自動調整（上限 560px），避免短短幾個字就被硬折行；含輸入欄位的表單式對話框維持固定寬度 */
   .ui-dialog.ui-dialog-form{ width:100%; max-width:390px; }
   .ui-dialog h3{ margin:0 0 8px; font-size:16px; }
-  .ui-dialog-msg{ font-size:13px; line-height:1.65; margin-bottom:16px; max-height:60vh; overflow-y:auto; }
+  .ui-dialog-msg{ font-size:13px; line-height:1.65; margin-bottom:16px; max-height:60vh; overflow-y:auto;  scrollbar-width:none; -ms-overflow-style:none; }
+  .ui-dialog-msg::-webkit-scrollbar{ display:none; width:0; height:0; }
+  /* 內容一次顯示完、不用滑動：放寬寬度、取消高度上限 */
+  .ui-dialog.ui-dialog-fit{ max-width:min(100%, 560px); }
+  .ui-dialog-fit .ui-dialog-msg{ max-height:none; overflow:visible; }
   .ui-dialog-actions{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
   .trash-row{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
   .trash-row:last-child{ border-bottom:none; }
@@ -275,8 +279,9 @@
   .avatar-card .aff-step{ position:absolute; bottom:3px; z-index:3; width:22px; height:22px; padding:0; border:none; border-radius:50%; background:rgba(28,37,65,.78); color:#fff; font-size:15px; font-weight:800; line-height:22px; text-align:center; cursor:pointer; opacity:0; pointer-events:none; transition:opacity .12s; }
   body.hide-quick-aff .avatar-card .aff-step{ display:none !important; }
   body.hide-batch-btn #btnEnterBatch{ display:none !important; }
-  .dbg-status{ display:none; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:var(--ink-soft); }
-  .dbg-status.on{ display:flex; }
+  .dbg-status{ display:flex; align-items:center; gap:8px; margin-top:0; max-height:0; overflow:hidden; font-size:12px; color:var(--ink-soft); opacity:0; transition:max-height .25s ease, margin-top .25s ease, opacity .2s ease; }
+  body.reduce-motion .dbg-status{ transition:none; }
+  .dbg-status.on{ max-height:32px; margin-top:8px; opacity:1; }
   .dbg-status .dbg-spin{ width:14px; height:14px; flex:none; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:dbgSpin .8s linear infinite; }
   @keyframes dbgSpin{ to{ transform:rotate(360deg); } }
   /* 作業完畢：左邊的轉圈圈換成一個勾 */
@@ -630,12 +635,38 @@
   .modal-nav-arrow:active{ transform: scale(.92); }
   /* 最左/最右時的佔位：保留箭頭的空間但不顯示，避免視窗左右位移 */
   .modal-nav-arrow.modal-nav-placeholder{ visibility:hidden; pointer-events:none; box-shadow:none; }
+  /* 上一位／下一位箭頭：滑鼠移上去時在箭頭上方顯示該學生的圖片（通用設定 › 編輯界面 › 可關閉） */
+  .modal-nav-arrow{ position:relative; }
+  .modal-nav-arrow:hover, .modal-nav-arrow:focus-visible{ z-index:5; }
+  .nav-preview{
+    position:absolute; top:50%; width:96px; padding:5px 5px 6px;
+    background:var(--panel); color:var(--ink); border:1px solid var(--border); border-radius:10px;
+    box-shadow:0 8px 22px rgba(0,0,0,.28); display:flex; flex-direction:column; align-items:center; gap:4px;
+    font-size:11px; font-weight:600; line-height:1.25; text-align:center; cursor:default;
+    opacity:0; visibility:hidden; transform:translateY(-50%); pointer-events:none;
+    transition:opacity .15s ease, visibility .15s;
+  }
+  /* 顯示在箭頭外側（遠離編輯視窗），不遮住視窗內容 */
+  .modal-nav-prev .nav-preview{ right:calc(100% + 10px); }
+  .modal-nav-next .nav-preview{ left:calc(100% + 10px); }
+  .modal-nav-arrow.nav-nospace .nav-preview{ display:none; }
+  .modal-nav-arrow:hover .nav-preview, .modal-nav-arrow:focus-visible .nav-preview{ opacity:1; visibility:visible; }
+  .nav-preview img, .nav-preview .nav-preview-ph{ width:84px; height:84px; border-radius:7px; object-fit:cover; display:block; background:var(--chip-bg); }
+  .nav-preview .nav-preview-ph{ display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:800; color:var(--muted-icon); }
+  .nav-preview .nav-preview-dir{ font-size:10px; font-weight:500; color:var(--ink-soft); }
+  .nav-preview .nav-preview-name{ max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @media (hover:none){ .nav-preview{ display:none; } }
   @media (max-width: 720px){
     .overlay{ gap:4px; }
     .modal-nav-arrow{ width:32px; height:32px; font-size:17px; }
   }
   .modal h3{ margin:0 0 4px; font-size:17px; text-align:center; }
-  .modal .modal-sub{ font-size:12px; color:var(--ink-soft); margin-bottom:16px; text-align:center; }
+  .modal .school-pick-current{ opacity:.45; }
+  body.school-picking .topbar, body.school-picking .topbar *{ cursor:not-allowed !important; }
+  body.school-picking .sidebar .school-item{ cursor:pointer; }
+  .school-move-link{ cursor:default; }
+  .school-move-link:hover, .school-move-link:focus-visible{ text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer; outline:none; }
+  .modal-sub{ font-size:12px; color:var(--ink-soft); margin-bottom:16px; text-align:center; }
   .modal-columns{ column-count:2; column-gap:32px; column-fill:balance; }
   .modal-section{ break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; }
   @media (max-width: 720px){
@@ -1422,12 +1453,13 @@
        always stays reachable with a thumb, regardless of scroll position —
        visibility is still fully controlled by the existing JS show/hide
        logic (setNormalControlsVisible), this only changes where it sits. */
-    #btnAddStudent{
+    #btnAddStudent, #btnAddStudentOutput{
       position:fixed; right:18px; bottom:18px; z-index:40;
       border-radius:999px; padding:14px 22px; font-size:14px; font-weight:700;
       box-shadow:0 10px 24px rgba(15,20,35,.3);
     }
-    #normalControls{ background:none; border:none; padding:0; }
+    #normalControls, #outputAddGroup{ background:none; border:none; padding:0; }
+    #btnAddStudentOutput{ background:var(--accent); border-color:var(--accent); color:#fff; }
     #normalControls #btnEditSchool, #normalControls #btnEnterOutput{
       background:var(--hover-bg); border:1px solid var(--border); border-radius:10px;
     }
@@ -1462,7 +1494,7 @@
     .export-avatar-row{ gap:6px; }
     .abbrev-row{ grid-template-columns: 1fr; gap:4px; }
     .abbrev-row .abbrev-remove{ justify-self:end; }
-    #btnAddStudent{ right:14px; bottom:14px; padding:13px 18px; font-size:13px; }
+    #btnAddStudent, #btnAddStudentOutput{ right:14px; bottom:14px; padding:13px 18px; font-size:13px; }
   }
 
   /* Very small / narrow-width phones (e.g. iPhone SE, older Android). */
@@ -1471,7 +1503,7 @@
     .grid{ grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap:8px; }
     .modal{ padding: 14px 14px 0; }
     .row2, .row3, .row4{ grid-template-columns: 1fr; }
-    #btnAddStudent{ padding:12px 16px; font-size:12.5px; }
+    #btnAddStudent, #btnAddStudentOutput{ padding:12px 16px; font-size:12.5px; }
   }
 
   /* Tablets / small laptops: keep the sidebar but let it (and the grid) use
@@ -1670,6 +1702,9 @@
             <button class="btn btn-ghost btn-sm" id="btnEnterBatch">批量編輯</button>
             <button class="btn btn-ghost btn-sm" id="btnEnterOutput">輸出模式</button>
           </div>
+          <div class="control-group" id="outputAddGroup" style="display:none;">
+            <button class="btn btn-ghost btn-sm" id="btnAddStudentOutput">+ 新增學生</button>
+          </div>
           <div class="control-group" id="outputControls" style="display:none;">
             <button type="button" class="btn btn-ghost btn-sm output-count" id="outputCount" title="點擊查看／移除已選擇的角色">已選擇 0/10</button>
             <button class="btn btn-primary btn-sm" id="btnViewOutput" disabled>查看輸出</button>
@@ -1724,8 +1759,8 @@
   })();
 
   // 版本資訊：每次改版時更新這兩個值（顯示在 設定 › 通用設定）
-  const APP_VERSION = "2026.11.01";
-  const APP_UPDATED = "2026-11-01";
+  const APP_VERSION = "2026.11.20";
+  const APP_UPDATED = "2026-11-20";
   function appVersionText(){
     const days = Math.max(0, Math.floor((Date.now() - new Date(APP_UPDATED + "T00:00:00").getTime()) / 86400000));
     const ago = days === 0 ? "今天更新" : days < 30 ? days + " 天前更新" : days < 365 ? Math.floor(days / 30) + " 個月前更新" : Math.floor(days / 365) + " 年前更新";
@@ -1954,8 +1989,10 @@
   let nameCardStyle = localStorage.getItem("ba-roster-name-card-style") || "prefix";
   const NAME_CARD_STYLE_LABELS = {
     "prefix": "名字樣式：前綴顯示",
-    "full": "名字樣式：完整顯示"
+    "full": "名字樣式：完整顯示",
+    "stack": "名字樣式：完整顯示（意義固定換行）"
   };
+  const NAME_CARD_STYLE_ORDER = ["prefix", "full", "stack"];
   // Four visual styles for how full the affinity heart icon on cards looks
   // relative to the actual value/max, mirroring how 屬性 cycles its own two
   // styles: clicking the 好感度 card-display toggle again while already
@@ -1994,6 +2031,7 @@
   let sidebarTab = "school"; // 屬性分頁已移除，改用排序與篩選
   let currentAttribute = null;
   let lastGridViewKey = null;
+  let forceGridAnim = false;   // 篩選條件改變後重畫卡片時，強制重播卡片進場動畫
   // The full list of students (in on-screen order) from whichever grid view
   // was last populated — school, attribute, all-students, search results, or
   // 撤銷模式. Lets the student edit modal offer 上一位/下一位 navigation that
@@ -2074,6 +2112,7 @@
     ovHideGroup: false,          // 總覽：隱藏「分組／簡寫」按鈕（名字旁按鈕被隱藏時鎖定為顯示）
     ovHideAttrArmor: false,      // 總覽：隱藏「屬性／裝甲」按鈕
     avatarCorner: "none",        // 編輯學生視窗：卡片圖片左下角顯示什麼（none | level | star | affinity），按鈕在編輯視窗內
+    navPreview: true,            // 編輯學生視窗：滑鼠移到 上一位／下一位 箭頭時顯示該學生圖片
     // 輸出模式 › 技能優先級
     skillPrioBgFollowUi: true,   // "使用介面背景" also carries over all of the UI's background settings
     skillPrioRatio: "16:9",      // "16:9" | "4:3" | "1:1" | "bg" (follow the background image) | "custom"
@@ -2183,7 +2222,8 @@
     attrArmorPopover: { label: "屬性／裝甲顯示方式", bool: ["頁面", "小視窗"] },
     ovHideGroup: { label: "總覽隱藏分組按鈕", bool: ["顯示", "隱藏"] },
     ovHideAttrArmor: { label: "總覽隱藏屬性／裝甲按鈕", bool: ["顯示", "隱藏"] },
-    avatarCorner: { label: "卡片圖片左下角標", map: { none: "不顯示", level: "等級", star: "專武星數", affinity: "好感度" } }
+    avatarCorner: { label: "卡片圖片左下角標", map: { none: "不顯示", level: "等級", star: "專武星數", affinity: "好感度" } },
+    navPreview: { label: "學生圖示顯示", bool: ["關閉", "開啟"] }
   };
 
   function describeSettingValue(key, value){
@@ -2464,7 +2504,7 @@
   const AV_EXPORT_NOTES = {
     none: "匯出檔不含 WebP：WebP 會轉回 PNG（檔案可能變大）。",
     keep: "維持各圖片目前的格式，不轉換。",
-    all: "全部轉成 WebP，匯出檔最小；不影響現有圖片。"
+    all: "全部轉成 WebP，匯出檔最小。"
   };
   function avExportMode(s){ return s.avatarExportWebp === "none" || s.avatarExportWebp === "all" ? s.avatarExportWebp : "keep"; }
   function isEffectiveDark(s){
@@ -3590,6 +3630,8 @@
     // just an optimistic, already-correct placeholder in the common case.
     if(on){
       document.getElementById("normalControls").style.display = "none";
+      const outAddGroup = document.getElementById("outputAddGroup");
+      if(outAddGroup) outAddGroup.style.display = lastNormalControlsState.showAdd ? "flex" : "none";
     } else {
       setNormalControlsVisible(
         lastNormalControlsState.showEdit,
@@ -3723,7 +3765,7 @@
 
   // 篩選: tick several values per group. Within a group any match counts (OR),
   // across groups all must match (AND). Saved so it survives a reload.
-  const studentFilter = { attr: [], armor: [], star: [], school: [], affMin: null, affMax: null };
+  const studentFilter = { attr: [], armor: [], star: [], gearBond: [], school: [], affMin: null, affMax: null };
   (function loadFilterState(){
     try{
       const saved = JSON.parse(localStorage.getItem("ba-roster-filter") || "null");
@@ -3731,6 +3773,7 @@
       studentFilter.attr = (saved.attr || []).filter(function(id){ return ATTRIBUTES.some(function(a){ return a.id === id; }); });
       studentFilter.armor = (saved.armor || []).filter(function(id){ return ARMORS.some(function(a){ return a.id === id; }); });
       studentFilter.star = (saved.star || []).filter(function(n){ return Number.isInteger(n) && n >= 1 && n <= 9; });
+      studentFilter.gearBond = (saved.gearBond || []).filter(function(n){ return n === 1 || n === 2; });
       studentFilter.school = (saved.school || []).filter(function(id){ return typeof id === "string"; });
       const okAff = function(n){ return Number.isInteger(n) && n >= 1 && n <= 100; };
       studentFilter.affMin = okAff(saved.affMin) ? saved.affMin : (okAff(saved.affinity) ? saved.affinity : null);   // 舊版單一數值 → 轉成區間
@@ -3741,7 +3784,7 @@
     try{ localStorage.setItem("ba-roster-filter", JSON.stringify(studentFilter)); }catch(e){}
   }
   function filterCount(){
-    return (filterIgnoresAttr() ? 0 : studentFilter.attr.length) + activeSchoolFilter().length + studentFilter.armor.length + studentFilter.star.length + ((studentFilter.affMin != null || studentFilter.affMax != null) ? 1 : 0);
+    return (filterIgnoresAttr() ? 0 : studentFilter.attr.length) + activeSchoolFilter().length + studentFilter.armor.length + studentFilter.star.length + studentFilter.gearBond.length + ((studentFilter.affMin != null || studentFilter.affMax != null) ? 1 : 0);
   }
   function studentFilterActive(){ return filterCount() > 0; }
   // The attribute group is ignored while browsing a single attribute (it would be redundant).
@@ -3765,6 +3808,7 @@
       if(schoolIds.length && schoolIds.indexOf(s.schoolId) === -1) return false;
       if(studentFilter.armor.length && studentFilter.armor.indexOf(s.armor) === -1) return false;
       if(studentFilter.star.length && studentFilter.star.indexOf(s.weaponStar || 0) === -1) return false;
+      if(studentFilter.gearBond.length && studentFilter.gearBond.indexOf(s.gearBond || 0) === -1) return false;
       if(studentFilter.affMin != null && (s.affinity || 0) < studentFilter.affMin) return false;
       if(studentFilter.affMax != null && (s.affinity || 0) > studentFilter.affMax) return false;
       return true;
@@ -3793,11 +3837,12 @@
     document.getElementById("btnClearFilterEmpty").addEventListener("click", clearStudentFilter);
   }
   async function clearStudentFilter(){
-    studentFilter.attr = []; studentFilter.armor = []; studentFilter.star = []; studentFilter.school = []; studentFilter.affMin = null; studentFilter.affMax = null;
+    studentFilter.attr = []; studentFilter.armor = []; studentFilter.star = []; studentFilter.gearBond = []; studentFilter.school = []; studentFilter.affMin = null; studentFilter.affMax = null;
     saveFilterState();
     syncFilterUI();
     if(document.getElementById("filterPanel")) renderFilterPanel();
-    await renderMain();
+    forceGridAnim = true;
+    try{ await renderMain(); } finally { forceGridAnim = false; }
   }
 
   function closeFilterPanel(){
@@ -3845,6 +3890,7 @@
         '<span class="aff-sep">～</span>' +
         '<input type="number" id="filterAffMax" class="view-select filter-aff-input" min="1" max="100" step="1" inputmode="numeric" placeholder="最大" value="' + (studentFilter.affMax != null ? studentFilter.affMax : "") + '" aria-label="好感度上限">' +
         '<span class="filter-help" tabindex="0" role="note" aria-label="只填一邊＝以上／以下；兩邊相同＝剛好等於">?<span class="filter-help-tip">只填一邊＝以上／以下<br>兩邊相同＝剛好等於</span></span></div>' +
+      group("gearBond", "好感裝備", [{ value: 1, label: "1級" }, { value: 2, label: "2級" }]) +
       ((filterIgnoresSchool() || !schools.length) ? "" : group("school", "學校", orderedSchools().map(function(s){ return { value: s.id, label: s.name }; }))) +
       '<div class="filter-foot"><span class="filter-hint">' + (studentFilterActive() ? "借用學生不會顯示" : "") + '</span>' +
       '<button type="button" class="btn btn-ghost btn-sm" id="filterClearBtn"' + (studentFilterActive() ? "" : " disabled") + '>清除全部</button></div>';
@@ -3852,14 +3898,15 @@
       chip.addEventListener("click", async function(){
         const key = chip.getAttribute("data-group");
         const raw = chip.getAttribute("data-value");
-        const val = key === "star" ? parseInt(raw, 10) : raw;
+        const val = (key === "star" || key === "gearBond") ? parseInt(raw, 10) : raw;
         const arr = studentFilter[key];
         const idx = arr.indexOf(val);
         if(idx === -1) arr.push(val); else arr.splice(idx, 1);
         saveFilterState();
         syncFilterUI();
         renderFilterPanel();
-        await renderMain();
+        forceGridAnim = true;
+        try{ await renderMain(); } finally { forceGridAnim = false; }
       });
     });
     const parseAff = function(el){
@@ -3878,7 +3925,8 @@
         if(cb) cb.disabled = !studentFilterActive();
         const hint = p.querySelector(".filter-foot .filter-hint");
         if(hint) hint.textContent = studentFilterActive() ? "借用學生不會顯示" : "";
-        await renderMain();
+        forceGridAnim = true;
+        try{ await renderMain(); } finally { forceGridAnim = false; }
       });
     });
     document.getElementById("filterClearBtn").addEventListener("click", clearStudentFilter);
@@ -4121,6 +4169,9 @@
     if(enterOutputBtn) enterOutputBtn.style.display = (!outputMode && !batchMode && showOutput) ? "inline-block" : "none";
     if(enterBatchBtn) enterBatchBtn.style.display = (!outputMode && !batchMode && showOutput) ? "inline-block" : "none";
     if(group) group.style.display = anyVisible ? "flex" : "none";
+    // 輸出模式下，同樣的條件（選了學校等）也要能新增學生
+    const outAddGroup = document.getElementById("outputAddGroup");
+    if(outAddGroup) outAddGroup.style.display = (outputMode && !batchMode && showAdd) ? "flex" : "none";
   }
 
   async function renderMain(){
@@ -4413,7 +4464,7 @@
   function populateGrid(students, viewKey, cardOpts){
     currentGridStudents = Array.isArray(students) ? students.slice() : [];
     const grid = document.getElementById("studentGrid");
-    const shouldAnimate = viewKey !== lastGridViewKey;
+    const shouldAnimate = forceGridAnim || viewKey !== lastGridViewKey;
     lastGridViewKey = viewKey;
     grid.innerHTML = "";
     grid.classList.toggle("reorderable-grid", !!(cardOpts && cardOpts.reorderable));
@@ -4436,10 +4487,35 @@
     // "完整顯示" name style: after layout, split any name-tag whose
     // name+meaning text doesn't fit on one line onto two lines instead of
     // letting it get cut off with an ellipsis (see .name-tag.stacked above).
-    grid.querySelectorAll(".name-tag").forEach(function(tagEl){
-      if(!tagEl.querySelector(".name-tag-full")) return;
-      tagEl.classList.toggle("stacked", tagEl.scrollWidth > tagEl.clientWidth + 0.5);
+    fitNameTags(grid);
+    // 卡片寬度之後才變動（出現捲軸、視窗縮放、側邊欄變寬、字體載入完…）時要重新判斷，
+    // 不然剛好卡在邊界的名字會被「...」截掉卻沒有換行。
+    if(document.fonts && document.fonts.ready) document.fonts.ready.then(function(){ fitNameTags(grid); });
+    if(!nameFitObserver && window.ResizeObserver){
+      let lastW = grid.clientWidth;
+      nameFitObserver = new ResizeObserver(function(){
+        const w = grid.clientWidth;
+        if(w === lastW) return;
+        lastW = w;
+        fitNameTags(grid);
+      });
+      nameFitObserver.observe(grid);
+    }
+  }
+  let nameFitObserver = null;
+  // 先全部還原成單行再量，量完再決定哪些要換行（已經換行的不能直接量，否則會被誤判成放得下）
+  function fitNameTags(grid){
+    const tags = Array.prototype.filter.call(grid.querySelectorAll(".name-tag"), function(t){ return t.querySelector(".name-tag-full"); });
+    tags.forEach(function(t){ t.classList.remove("stacked"); });
+    // 不能用 scrollWidth：名字條左右有內距，文字只超出一點點時 scrollWidth 仍等於 clientWidth，
+    // 會被誤判成放得下（結果是被「...」截掉卻沒換行）。直接量文字的實際寬度，跟可用寬度比。
+    const widths = tags.map(function(t){
+      const cs = getComputedStyle(t);
+      const avail = t.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+      return t.querySelector(".name-tag-full").getBoundingClientRect().width > avail - 0.5;   // clientWidth 是整數，實際寬度可能多零點幾 px，所以寧可早一點換行
     });
+    // 「意義固定換行」樣式：不管放不放得下，意義一律放第二行
+    tags.forEach(function(t, i){ t.classList.toggle("stacked", widths[i] || !!t.querySelector(".always-stack")); });
   }
 
   // Splits a student's "完整顯示" (full) name-tag content into a base name
@@ -4721,7 +4797,7 @@
               return sch ? escapeHtml(sch.name) : "－";
             })()
           : (function(){
-              if(nameCardStyle !== "full"){
+              if(nameCardStyle !== "full" && nameCardStyle !== "stack"){
                 // Short name shown: hovering (or a screen reader) still gets the full name.
                 return fullNm !== view.name
                   ? '<abbr class="name-abbr" title="' + escapeHtml(fullNm) + '">' + escapeHtml(view.name) + '</abbr>'
@@ -4729,7 +4805,7 @@
               }
               const parts = nameParts;
               if(!parts.meaning) return escapeHtml(parts.base);
-              return '<span class="name-tag-full">' +
+              return '<span class="name-tag-full' + (nameCardStyle === "stack" ? " always-stack" : "") + '">' +
                        '<span class="ntl1">' + escapeHtml(parts.base) + '</span>' +
                        '<span class="ntl-sep"> </span>' +
                        '<span class="ntl2">(' + escapeHtml(parts.meaning) + ')</span>' +
@@ -5228,7 +5304,7 @@
       const prevFocus = document.activeElement;
       const back = document.createElement("div");
       back.className = "ui-dialog-backdrop";
-      back.innerHTML = '<div class="ui-dialog' + (opts.bodyHtml ? ' ui-dialog-form' : '') + '" role="alertdialog" aria-modal="true">' +
+      back.innerHTML = '<div class="ui-dialog' + (opts.bodyHtml ? ' ui-dialog-form' : '') + (opts.fit ? ' ui-dialog-fit' : '') + '" role="alertdialog" aria-modal="true">' +
         (opts.title ? '<h3>' + escapeHtml(opts.title) + '</h3>' : '') +
         '<div class="ui-dialog-msg">' + escapeHtml(opts.message || "").replace(/\n/g, "<br>") + '</div>' +
         (opts.bodyHtml ? '<div class="ui-dialog-body">' + opts.bodyHtml + '</div>' : '') +
@@ -6344,6 +6420,15 @@
             '</div>' +
           '</div>' +
           '<div class="variant-group-note" style="margin-top:-6px;">編輯學生視窗裡，卡片圖片左下角要顯示的小標籤。預設不顯示；借用學生不會顯示。</div>' +
+          '<div class="fieldset-title">學生圖示顯示</div>' +
+          '<div class="field no-divider">' +
+            '<label>移到左右箭頭時顯示</label>' +
+            '<div class="theme-toggle-row">' +
+              '<button type="button" class="btn btn-sm theme-opt' + (draft.navPreview !== false ? " active" : "") + '" id="st_navPreviewOn">開</button>' +
+              '<button type="button" class="btn btn-sm theme-opt' + (draft.navPreview === false ? " active" : "") + '" id="st_navPreviewOff">關</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="variant-group-note" style="margin-top:-6px;">滑鼠移到左右箭頭，就會跳出上一位／下一位的圖片。</div>' +
         '</div>'
       ) : '')
     );
@@ -6829,6 +6914,8 @@
     viewControlsGroup.style.display = "none";
     normalControls.style.display = "none";
     outputControls.style.display = "none";
+    const outAddGroupEl = document.getElementById("outputAddGroup");
+    if(outAddGroupEl) outAddGroupEl.style.display = "none";
     gridEl.style.display = "none";
     emptyEl.style.display = "none";
 
@@ -7018,6 +7105,8 @@
       // does), so it has to be reconciled against the live outputMode
       // flag directly here.
       if(outputControls) outputControls.style.display = outputMode ? "flex" : "none";
+      const outAddGroupBack = document.getElementById("outputAddGroup");
+      if(outAddGroupBack) outAddGroupBack.style.display = (outputMode && lastNormalControlsState.showAdd) ? "flex" : "none";
       return value;
     }
 
@@ -7242,7 +7331,6 @@
           spOutputSettingsHtml(draft, "st_") +
         '</div>' +
         '<div class="settings-page" data-page="sync" style="display:none">' +
-          '<div style="font-size:12.5px; color:var(--ink-soft); margin:0 0 10px;">整份覆蓋：開始前先拉取，改完再推送。按鈕立即生效；token 只存在這台裝置。</div>' +
           '<form id="syncLoginForm" autocomplete="on" novalidate>' +
             '<div class="field"><label for="st_syncRepo">repo（帳號/名稱）</label><input type="text" id="st_syncRepo" name="username" placeholder="myname/ba-roster-data" autocomplete="username" autocapitalize="off" spellcheck="false"></div>' +
             '<div class="field"><label for="st_syncToken">token</label><input type="password" id="st_syncToken" name="password" placeholder="github_pat_…" autocomplete="current-password" autocapitalize="off" spellcheck="false">' +
@@ -7277,7 +7365,7 @@
           '<div class="field" style="display:flex; gap:8px; flex-wrap:wrap;">' +
             '<button type="button" class="btn btn-sm" id="btnHtmlRepoInfo" title="查看放這個網頁（HTML 檔）的 GitHub 倉庫目前多大、有幾筆歷史">網頁倉庫大小</button>' +
             '<button type="button" class="btn btn-sm" id="btnSyncRepoInfo" title="查看上面「同步用」的 GitHub 倉庫（存備份資料的那個）目前多大、有幾筆歷史">資料倉庫大小</button>' +
-            '<button type="button" class="btn btn-sm" id="btnSyncDiffInfo" title="下載雲端的備份，和這台目前的資料比對，列出哪些學生、學校、簡寫表不同（只查看，不會改動任何資料）">本機與雲端差異</button>' +
+            '<button type="button" class="btn btn-sm" id="btnSyncDiffInfo" title="下載雲端的備份，和這台目前的資料比對，列出哪些學生、學校、簡寫表不同">本機與雲端差異</button>' +
           '</div>' +
           '<div class="dbg-status" id="dbgStatus" role="status" aria-live="polite"><span class="dbg-spin" aria-hidden="true"></span><span id="dbgStatusText"></span></div>' +
         '</div>' +
@@ -7327,7 +7415,7 @@
               '<button type="button" class="btn btn-sm bkp-btn" id="btnClearCache"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>清除</button>' +
             '</div>' +
           '</div>' +
-          '<div class="variant-group-note">釋放記憶體暫存，不會刪除任何資料，需要時自動重新載入。</div>' +
+          '<div class="variant-group-note">釋放記憶體暫存，需要時自動重新載入。</div>' +
           '<div class="setting-row">' +
             '<div class="setting-row-label bkp-label"><span class="bkp-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span><div class="fieldset-title">初始化設定</div></div>' +
             '<div class="field" style="display:flex; gap:6px;">' +
@@ -7418,6 +7506,7 @@
         ["同組角色版本", '<path d="M12 20s-7-4.5-7-10a4 4 0 017-2.5A4 4 0 0119 10c0 5.5-7 10-7 10z"/>'],
         ["屬性／裝甲", '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>'],
         ["卡片圖片左下角標", '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="16" r="2"/>'],
+        ["學生圖示顯示", '<circle cx="12" cy="9" r="3"/><path d="M7 19c0-3 2.2-5 5-5s5 2 5 5"/><path d="M4.5 8.5L2 12l2.5 3.5M19.5 8.5L22 12l-2.5 3.5"/>'],
         ["輸出時切換角色形態", '<path d="M7 7h11l-3-3M17 17H6l3 3"/>'],
         ["技能優先級：文字輸出", '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>'],
         ["技能優先級：標題與文字語言", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>'],
@@ -7641,6 +7730,7 @@
         ["st_syncCheckOn", "st_syncCheckOff"],
         ["st_ovHideGroupOn", "st_ovHideGroupOff"],
         ["st_ovHideAttrOn", "st_ovHideAttrOff"],
+        ["st_navPreviewOn", "st_navPreviewOff"],
         ["st_batchBtnOn", "st_batchBtnOff"]
       ]).forEach(function(pair){
         const onBtn = document.getElementById(pair[0]);
@@ -7944,7 +8034,7 @@
             box.classList.remove("dbg-done");
             txt.textContent = busyText; box.classList.add("on"); box.style.display = "flex";
             // 訊息在按鈕下方，位置在頁面底部時自動捲到看得見，不用自己往下滑
-            try{ box.scrollIntoView({ block: "nearest", behavior: document.body.classList.contains("reduce-motion") ? "auto" : "smooth" }); }catch(e){ box.scrollIntoView(); }
+            setTimeout(function(){ try{ box.scrollIntoView({ block: "nearest", behavior: document.body.classList.contains("reduce-motion") ? "auto" : "smooth" }); }catch(e){ box.scrollIntoView(); } }, 260);
             // 逾時自動取消：超過 DBG_TIMEOUT_MS 還沒結束就中止網路請求並解除鎖定（等你操作視窗的時間不算）
             var DBG_TIMEOUT_MS = timeoutMs || 15000, timer = null, finished = false, rejectTimeout;
             var ac = (typeof AbortController === "function") ? new AbortController() : null;
@@ -8000,7 +8090,7 @@
         }
       })();
       document.getElementById("btnSyncClear").addEventListener("click", function(){
-        if(!window.confirm("要清除這台裝置上的雲端連線資料（repo、token、裝置名稱、同步記錄）嗎？\n\n學生資料與雲端的備份都不會被刪除。")) return;
+        if(!window.confirm("要清除這台裝置上的雲端連線資料（repo、token、裝置名稱、同步記錄）嗎？")) return;
         localStorage.removeItem(SYNC_KEY);
         const fresh = syncLoadCfg();
         Object.keys(cfg).forEach(function(k){ cfg[k] = fresh[k]; });
@@ -8393,6 +8483,17 @@
         const v = b.getAttribute("data-corner");
         if((draft.avatarCorner || "none") !== v){ draft.avatarCorner = v; markDirty(); refreshAvatarCornerButtons(); }
       });
+    });
+
+    function refreshNavPreviewButtons(){
+      document.getElementById("st_navPreviewOn").classList.toggle("active", draft.navPreview !== false);
+      document.getElementById("st_navPreviewOff").classList.toggle("active", draft.navPreview === false);
+    }
+    document.getElementById("st_navPreviewOn").addEventListener("click", function(){
+      if(draft.navPreview === false){ draft.navPreview = true; markDirty(); refreshNavPreviewButtons(); }
+    });
+    document.getElementById("st_navPreviewOff").addEventListener("click", function(){
+      if(draft.navPreview !== false){ draft.navPreview = false; markDirty(); refreshNavPreviewButtons(); }
     });
 
     // ---- 輸出模式 ----
@@ -9247,7 +9348,8 @@
     else if(!st.skillEnh) st.skillEnh = 1;
     if(initialCharStar <= 2) st.skillSub = 0;
     else if(!st.skillSub) st.skillSub = 1;
-    const modalSchoolId = isNew ? currentSchoolId : st.schoolId;
+    let modalSchoolId = isNew ? currentSchoolId : st.schoolId;
+    const originalSchoolId = modalSchoolId;   // 在編輯視窗裡換學校（放錯時用）
     let isBorrowedMode = !!st.borrowed;
     // 兩個形態的卡片圖片：formImgs 存「沒在編輯的那個」，編輯中的圖片放在 currentAvatarData
     let hasForm2 = studentHasForm2(st);
@@ -9483,7 +9585,9 @@
 
     showModal(
       '<h3>' + (isNew ? "新增學生" : "編輯學生") + '</h3>' +
-      '<div class="modal-sub">' + escapeHtml((schools.find(function(s){return s.id===modalSchoolId;})||{}).name || "") + '</div>' +
+      '<div class="modal-sub">' + ((isNew || schools.length < 2)
+        ? escapeHtml((schools.find(function(s){return s.id===modalSchoolId;})||{}).name || "")
+        : '<span id="f_schoolName" class="school-move-link" role="button" tabindex="0" title="點一下可更換學校">' + escapeHtml((schools.find(function(s){return s.id===modalSchoolId;})||{}).name || "") + '</span>') + '</div>' +
       (isNew ? '<div class="borrowed-toggle-row">' +
         '<button type="button" class="btn btn-ghost btn-sm" id="btnBorrowedToggle" aria-pressed="false">標記為借用學生</button>' +
       '</div>' : '') +
@@ -9617,11 +9721,164 @@
           }
           if(autosaveNeedsGridRefresh){
             autosaveNeedsGridRefresh = false;
+            if(modalSchoolId !== originalSchoolId){
+              await refreshCounts();
+              const sc = schools.find(function(x){ return x.id === modalSchoolId; });
+              if(sc) showToast("已移到「" + sc.name + "」");
+            }
             await renderMain();
           }
         });
       } }
     );
+
+    (function(){
+      const nameEl = document.getElementById("f_schoolName");
+      if(!nameEl) return;
+      // 點學校名稱：把編輯視窗藏起來（內容保留），在主畫面原本放學生卡片的位置顯示學校卡片；
+      // 點卡片或點左邊（手機是上方）學校清單裡的學校，都會換過去並回到編輯視窗，也可以取消。
+      function openSchoolPicker(){
+        if(document.getElementById("schoolPickGrid")) return;
+        const nm = (document.getElementById("f_name") && document.getElementById("f_name").value.trim()) || st.name || "這位學生";
+        const hideIds = ["studentGrid", "emptyState"];
+        const saved = {};
+        hideIds.forEach(function(id){
+          const el = document.getElementById(id);
+          if(el){ saved[id] = el.style.display; el.style.display = "none"; }
+        });
+        const headCtl = document.querySelector(".main-head-controls");
+        const headCtlDisplay = headCtl ? headCtl.style.display : "";
+        if(headCtl) headCtl.style.display = "none";
+        const titleEl = document.getElementById("schoolTitle");
+        const subEl = document.getElementById("schoolSub");
+        const oldTitle = titleEl ? titleEl.textContent : "";
+        const oldSub = subEl ? subEl.textContent : "";
+        if(titleEl) titleEl.textContent = "移動「" + nm + "」";
+        if(subEl) subEl.textContent = "點選下方卡片或左邊清單裡的學校";
+        document.body.classList.add("school-picking");
+        const scrollEl = document.getElementById("mainScroll");
+        const oldScroll = scrollEl ? scrollEl.scrollTop : 0;
+        if(scrollEl) scrollEl.scrollTop = 0;
+
+        const bar = document.createElement("div");
+        bar.id = "schoolPickBar";
+        bar.className = "control-group";
+        bar.innerHTML = '<button type="button" class="btn btn-ghost btn-sm" id="schoolPickCancel">取消</button>';
+        if(headCtl && headCtl.parentNode) headCtl.parentNode.appendChild(bar);
+
+        const grid = document.createElement("div");
+        grid.id = "schoolPickGrid";
+        grid.className = "grid";
+        orderedSchools().forEach(function(school){
+          const idx = schools.indexOf(school);
+          const isCur = school.id === modalSchoolId;
+          const card = document.createElement("div");
+          card.className = "avatar-card school-card" + (isCur ? " school-pick-current" : "");
+          card.title = isCur ? school.name + "（目前）" : school.name;
+          card.innerHTML =
+            (school.icon
+              ? '<img src="' + school.icon + '" alt="' + escapeHtml(school.name) + '" draggable="false">'
+              : '<div class="ph" style="background:' + swatchFor(idx) + ';">' + escapeHtml((school.name || "?").slice(0, 1)) + '</div>') +
+            '<span class="badge-level">' + (school.count ?? 0) + ' 位</span>' +
+            '<span class="name-tag">' + escapeHtml(school.name) + (isCur ? "（目前）" : "") + '</span>';
+          card.addEventListener("click", function(){ choose(school.id); });
+          grid.appendChild(card);
+        });
+        if(scrollEl) scrollEl.insertBefore(grid, scrollEl.firstChild);
+
+        function choose(sid){
+          const sc = schools.find(function(x){ return x.id === sid; });
+          if(!sc || sid === modalSchoolId){ closePicker(); return; }
+          modalSchoolId = sid;
+          nameEl.textContent = sc.name;
+          closePicker();
+          formTouched = true;
+          updateRevertBtn();   // 換學校發生在編輯視窗外，要自己更新「還原」按鈕
+          if(typeof scheduleAutoSave === "function") scheduleAutoSave();
+        }
+        // 選學校期間，左邊（手機是上方）的清單只能用來挑學校；其他按鈕一律不動作，避免跳去別的畫面
+        const guards = [];
+        ["sidebar", "mobileSchools"].forEach(function(id){
+          const box = document.getElementById(id);
+          if(!box) return;
+          const stopFn = function(e){ e.stopImmediatePropagation(); };
+          const clickFn = function(e){
+            let sid = null;
+            const li = e.target.closest && e.target.closest(".school-item");
+            if(li && li.dataset.schoolId) sid = li.dataset.schoolId;
+            else if(id === "mobileSchools" && sidebarTab === "school"){
+              const chip = e.target.closest && e.target.closest(".chip");
+              if(chip){
+                const idx = Array.prototype.slice.call(box.querySelectorAll(".chip")).indexOf(chip);
+                const ord = orderedSchools();
+                if(idx >= 1 && idx - 1 < ord.length) sid = ord[idx - 1].id;
+              }
+            }
+            e.preventDefault(); e.stopImmediatePropagation();
+            if(sid) choose(sid);
+          };
+          ["pointerdown", "mousedown", "touchstart", "dblclick", "contextmenu"].forEach(function(t){ box.addEventListener(t, stopFn, true); });
+          box.addEventListener("click", clickFn, true);
+          guards.push(function(){
+            ["pointerdown", "mousedown", "touchstart", "dblclick", "contextmenu"].forEach(function(t){ box.removeEventListener(t, stopFn, true); });
+            box.removeEventListener("click", clickFn, true);
+          });
+        });
+        // 點空白處：第一下提示，連點第二下就取消更換
+        const mainEl = document.querySelector(".main");
+        if(mainEl){
+          let blankClicks = 0, blankTimer = null;
+          const blankFn = function(e){
+            const t = e.target;
+            const isBlank = t === mainEl || t === scrollEl || t === grid || (t.classList && t.classList.contains("main-head"));
+            if(!isBlank) return;
+            if(blankClicks === 0){
+              blankClicks = 1;
+              showToast("再點一下空白處可取消更換", 2500);
+              clearTimeout(blankTimer);
+              blankTimer = setTimeout(function(){ blankClicks = 0; }, 3000);
+            } else {
+              clearTimeout(blankTimer);
+              closePicker();
+            }
+          };
+          mainEl.addEventListener("click", blankFn);
+          guards.push(function(){ clearTimeout(blankTimer); mainEl.removeEventListener("click", blankFn); });
+        }
+        // 頂部列（搜尋、簡寫清單、通用設定）選學校期間不動作，滑鼠游標會顯示禁止符號
+        const topbar = document.querySelector(".topbar");
+        if(topbar){
+          const blockFn = function(e){ e.preventDefault(); e.stopImmediatePropagation(); };
+          const types = ["click", "mousedown", "pointerdown", "touchstart", "keydown", "dblclick", "contextmenu"];
+          types.forEach(function(t){ topbar.addEventListener(t, blockFn, true); });
+          guards.push(function(){ types.forEach(function(t){ topbar.removeEventListener(t, blockFn, true); }); });
+        }
+        function onKey(e){
+          if(e.key === "Escape"){ e.preventDefault(); e.stopImmediatePropagation(); closePicker(); }
+        }
+        function closePicker(){
+          document.removeEventListener("keydown", onKey, true);
+          guards.forEach(function(g){ g(); });
+          if(grid.parentNode) grid.parentNode.removeChild(grid);
+          if(bar.parentNode) bar.parentNode.removeChild(bar);
+          hideIds.forEach(function(id){
+            const el = document.getElementById(id);
+            if(el) el.style.display = saved[id] || "";
+          });
+          if(headCtl) headCtl.style.display = headCtlDisplay;
+          if(titleEl) titleEl.textContent = oldTitle;
+          if(subEl) subEl.textContent = oldSub;
+          document.body.classList.remove("school-picking");
+          if(scrollEl) scrollEl.scrollTop = oldScroll;
+          overlay.style.display = "flex";
+        }
+        document.addEventListener("keydown", onKey, true);
+        bar.querySelector("#schoolPickCancel").addEventListener("click", closePicker);
+        overlay.style.display = "none";
+      }
+      nameEl.addEventListener("click", openSchoolPicker);
+      nameEl.addEventListener("keydown", function(e){ if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openSchoolPicker(); } });
+    })();
 
     function renderVariantBox(){
       const container = document.getElementById("variantBoxContainer");
@@ -9934,13 +10191,34 @@
     if(!navNextStudent && navPrevStudent){
       overlay.insertAdjacentHTML("beforeend", '<button type="button" class="modal-nav-arrow modal-nav-next modal-nav-placeholder" aria-hidden="true" tabindex="-1" disabled></button>');
     }
+    // 箭頭上的學生圖片預覽（設定關閉時回傳空字串，並改用原本的文字提示）
+    const navPreviewOn = appSettings.navPreview !== false;
+    function navPreviewHtml(target, dirLabel){
+      if(!navPreviewOn) return "";
+      const src = studentAvatar(target);
+      const nm = studentName(target) || "";
+      return '<span class="nav-preview" aria-hidden="true">' +
+        (src ? '<img src="' + escapeHtml(src) + '" alt="" draggable="false">'
+             : '<span class="nav-preview-ph">' + escapeHtml(Array.from(nm)[0] || "?") + '</span>') +
+        '<span class="nav-preview-dir">' + dirLabel + '</span>' +
+        '<span class="nav-preview-name">' + escapeHtml(nm) + '</span>' +
+      '</span>';
+    }
+    // 外側空間不夠放預覽（視窗太窄）時就不顯示，避免被切掉
+    function navPreviewSpaceCheck(e){
+      const a = e.currentTarget, r = a.getBoundingClientRect();
+      const room = a.classList.contains("modal-nav-prev") ? r.left : (window.innerWidth - r.right);
+      a.classList.toggle("nav-nospace", room < 110);
+    }
     if(navPrevStudent){
-      overlay.insertAdjacentHTML("afterbegin", '<button type="button" class="modal-nav-arrow modal-nav-prev" id="studentNavPrev" title="上一位：' + escapeHtml(navPrevStudent.name || "") + '">\u2039</button>');
+      overlay.insertAdjacentHTML("afterbegin", '<button type="button" class="modal-nav-arrow modal-nav-prev" id="studentNavPrev" aria-label="上一位：' + escapeHtml(navPrevStudent.name || "") + '"' + (navPreviewOn ? '' : ' title="上一位：' + escapeHtml(navPrevStudent.name || "") + '"') + '>\u2039' + navPreviewHtml(navPrevStudent, "上一位") + '</button>');
       document.getElementById("studentNavPrev").addEventListener("click", function(){ navigateToStudent(navPrevStudent); });
+      if(navPreviewOn){ ["mouseenter","focus"].forEach(function(ev){ document.getElementById("studentNavPrev").addEventListener(ev, navPreviewSpaceCheck); }); }
     }
     if(navNextStudent){
-      overlay.insertAdjacentHTML("beforeend", '<button type="button" class="modal-nav-arrow modal-nav-next" id="studentNavNext" title="下一位：' + escapeHtml(navNextStudent.name || "") + '">\u203a</button>');
+      overlay.insertAdjacentHTML("beforeend", '<button type="button" class="modal-nav-arrow modal-nav-next" id="studentNavNext" aria-label="下一位：' + escapeHtml(navNextStudent.name || "") + '"' + (navPreviewOn ? '' : ' title="下一位：' + escapeHtml(navNextStudent.name || "") + '"') + '>\u203a' + navPreviewHtml(navNextStudent, "下一位") + '</button>');
       document.getElementById("studentNavNext").addEventListener("click", function(){ navigateToStudent(navNextStudent); });
+      if(navPreviewOn){ ["mouseenter","focus"].forEach(function(ev){ document.getElementById("studentNavNext").addEventListener(ev, navPreviewSpaceCheck); }); }
     }
     bindSliders(modalEl);
     updateGearSlotLock();
@@ -10562,6 +10840,7 @@
         else await putStudent(Object.assign({}, student));
       }
       skipDirtyPrompt = true;
+      modalSchoolId = originalSchoolId;   // 學校也退回去（關閉時就不會誤報「已移到…」）
       const cb = modalOnClose;
       modalOnClose = null;
       if(cb) cb();
@@ -10719,6 +10998,11 @@
       }
       skipDirtyPrompt = true;
       closeModal();
+      if(modalSchoolId !== originalSchoolId){
+        await refreshCounts();
+        const sc = schools.find(function(x){ return x.id === modalSchoolId; });
+        if(sc) showToast("已移到「" + sc.name + "」");
+      }
       await renderMain();
     });
   }
@@ -13979,7 +14263,7 @@
         diff = await backupDiff(data);
         diffMsg = "備份檔：" + data.students.length + " 位學生、" + data.schools.length + " 所學校\n" +
           "本機現有：" + diff.localStudentCount + " 位學生、" + diff.localSchoolCount + " 所學校\n\n" +
-          "合併匯入（不會刪除任何資料）\n" + diffLine("學生", diff.students, false) + "\n" + diffLine("學校", diff.schools, false) + "\n\n" +
+          "合併匯入\n" + diffLine("學生", diff.students, false) + "\n" + diffLine("學校", diff.schools, false) + "\n\n" +
           "完全取代（本機有、備份沒有的會被刪除）\n" + diffLine("學生", diff.students, true) + "\n" + diffLine("學校", diff.schools, true);
       }catch(err){ diff = null; }
       const mode = await askDialog({
@@ -14455,27 +14739,54 @@
         "雲端版本：" + (cfg.lastSha ? (meta.sha === cfg.lastSha ? "和這台上次同步的相同（雲端沒有人更新過）" : "和這台上次同步的不同（別的裝置推送過）") : "這台沒有同步紀錄"),
         ""
       ];
-      if(relation === "same"){
-        lines.push("結果：本機與雲端的內容完全一致。");
-      } else {
-        lines.push("結果：有差異。", "");
-        lines.push("【學生】只在雲端 " + st.add.length + "、只在本機 " + st.del.length + "、內容不同 " + st.upd.length + "、相同 " + st.same);
-        if(st.add.length) lines.push("　只在雲端：" + diffNames(st.add, 12));
-        if(st.del.length) lines.push("　只在本機：" + diffNames(st.del, 12));
-        if(fieldDiffs.length) lines.push("　內容不同的學生與欄位：", ...listFieldDiffs(10));
-        lines.push("");
-        lines.push("【學校】只在雲端 " + sc.add.length + "、只在本機 " + sc.del.length + "、內容不同 " + sc.upd.length + "、相同 " + sc.same);
-        if(sc.add.length) lines.push("　只在雲端：" + diffNames(sc.add, 12));
-        if(sc.del.length) lines.push("　只在本機：" + diffNames(sc.del, 12));
-        if(sc.upd.length) lines.push("　內容不同：" + diffNames(sc.upd, 12));
-        lines.push("");
-        lines.push("【簡寫表】" + (abbrevSame ? "一致" : "不同") + "　【分組定義】" + (groupsSame ? "一致" : "不同"));
-        lines.push("【卡片圖片】" + (avatarDiffs.length ? "不同 " + avatarDiffs.length + " 位（" + diffNames(avatarDiffs, 8) + "）" : "一致"));
+      // 依螢幕大小決定名單列出幾位：從多往少試，直到整段文字估計能在視窗內一次顯示完
+      const head = lines.slice();
+      const buildBody = function(n){
+        const out = [];
+        const names = function(arr){ return n > 0 ? diffNames(arr, n) : "共 " + arr.length + " 位"; };
+        if(relation === "same"){
+          out.push("結果：本機與雲端的內容完全一致。");
+          return out;
+        }
+        out.push("結果：有差異。", "");
+        out.push("【學生】只在雲端 " + st.add.length + "、只在本機 " + st.del.length + "、內容不同 " + st.upd.length + "、相同 " + st.same);
+        if(st.add.length) out.push("　只在雲端：" + names(st.add));
+        if(st.del.length) out.push("　只在本機：" + names(st.del));
+        if(fieldDiffs.length){
+          out.push("　內容不同的學生與欄位：");
+          if(n > 0) listFieldDiffs(n).forEach(function(x){ out.push(x); });
+          else out.push("　‧ 共 " + fieldDiffs.length + " 位");
+        }
+        out.push("");
+        out.push("【學校】只在雲端 " + sc.add.length + "、只在本機 " + sc.del.length + "、內容不同 " + sc.upd.length + "、相同 " + sc.same);
+        if(sc.add.length) out.push("　只在雲端：" + names(sc.add));
+        if(sc.del.length) out.push("　只在本機：" + names(sc.del));
+        if(sc.upd.length) out.push("　內容不同：" + names(sc.upd));
+        out.push("");
+        out.push("【簡寫表】" + (abbrevSame ? "一致" : "不同") + "　【分組定義】" + (groupsSame ? "一致" : "不同") + "　【卡片圖片】" + (avatarDiffs.length ? "不同 " + avatarDiffs.length + " 位" + (n > 0 ? "（" + diffNames(avatarDiffs, Math.min(8, n)) + "）" : "") : "一致"));
         const anyListed = st.add.length || st.del.length || st.upd.length || sc.add.length || sc.del.length || sc.upd.length || !abbrevSame || !groupsSame || avatarDiffs.length;
-        if(!anyListed) lines.push("", "只有一些細節不同（例如學校圖示的原圖），學生、學校清單、簡寫表與圖片都一致。");
-        lines.push("", "（這只是查看，不會改動任何資料。）");
+        if(!anyListed) out.push("", "只有一些細節不同（例如學校圖示的原圖），學生、學校清單、簡寫表與圖片都一致。");
+        return out;
+      };
+      // 估算折行後的總行數（中文字約 13px 寬、英數約一半），視窗可用高度扣掉標題與按鈕
+      const estLines = function(arr, cpl){
+        return arr.reduce(function(sum, ln){
+          let w = 0;
+          for(const ch of ln) w += ch.charCodeAt(0) < 256 ? 0.55 : 1;
+          return sum + Math.max(1, Math.ceil(w / cpl));
+        }, 0);
+      };
+      const dlgW = Math.min(window.innerWidth - 32, 560) - 44;
+      const cpl = Math.max(8, Math.floor(dlgW / 13));
+      const budget = Math.floor((window.innerHeight - 32 - 130) / 21.5);
+      let body = buildBody(0);
+      for(let n = 40; n >= 1; n--){
+        const cand = buildBody(n);
+        if(estLines(head.concat(cand), cpl) <= budget){ body = cand; break; }
       }
-      await askDialog({ title: "本機與雲端差異", message: lines.join("\n"), buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
+      lines.length = 0;
+      head.concat(body).forEach(function(x){ lines.push(x); });
+      await askDialog({ title: "本機與雲端差異", fit: true, message: lines.join("\n"), buttons: [{ label: "關閉", value: null, kind: "primary" }], cancelValue: null });
     }catch(err){
       showToast((err && err.message) || "無法比對本機與雲端");
     }
@@ -14672,7 +14983,7 @@
   document.getElementById("cardStyleBtn").addEventListener("click", async function(){
     restoreSchoolModeOnMultiView = false;
     if(cardDisplayMode === "name"){
-      nameCardStyle = (nameCardStyle === "prefix") ? "full" : "prefix";
+      nameCardStyle = NAME_CARD_STYLE_ORDER[(NAME_CARD_STYLE_ORDER.indexOf(nameCardStyle) + 1) % NAME_CARD_STYLE_ORDER.length];
       localStorage.setItem("ba-roster-name-card-style", nameCardStyle);
       showToast(NAME_CARD_STYLE_LABELS[nameCardStyle]);
     } else if(cardDisplayMode === "attribute"){
@@ -14878,6 +15189,7 @@
   })();
   document.getElementById("btnEditSchool").addEventListener("click", openEditSchoolModal);
   document.getElementById("btnAddStudent").addEventListener("click", function(){ openStudentModal(null); });
+  document.getElementById("btnAddStudentOutput").addEventListener("click", function(){ openStudentModal(null); });
   document.getElementById("importFileInput").addEventListener("change", function(e){
     const file = e.target.files[0];
     if(file) importBackup(file);
